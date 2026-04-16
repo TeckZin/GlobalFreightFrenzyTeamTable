@@ -18,7 +18,7 @@ import random
 
 _PROXIMITY_M = 50.0
 
-
+print("start")
 def step(sim_state):
     """Called by the simulator each tick.
 
@@ -29,8 +29,10 @@ def step(sim_state):
     tick = sim_state.tick
 
     # ── Tick 0: spawn one random vehicle at every unique hub location ────
+    print(sim_state.get_airports())
     if tick == 0:
         boxes = sim_state.get_boxes()
+        print(boxes)
         seen_hubs = set()
         vehicle_types = list(VehicleType)
         for box in boxes.values():
