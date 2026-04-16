@@ -1,1161 +1,732 @@
 from simulator import VehicleType, haversine_distance_meters
 
-AIRPORTS = [
-    {'id': 'los_angeles_international_airport',         'lat':  33.9425, 'lon': -118.4081},
-    {'id': 'john_f_kennedy_international_airport',      'lat':  40.6413, 'lon':  -73.7781},
-    {'id': 'ohare_international_airport',               'lat':  41.9742, 'lon':  -87.9073},
-    {'id': 'dallas_fort_worth_international_airport',   'lat':  32.8998, 'lon':  -97.0403},
-    {'id': 'miami_international_airport',               'lat':  25.7959, 'lon':  -80.2870},
-    {'id': 'seattle_tacoma_international_airport',      'lat':  47.4502, 'lon': -122.3088},
-    {'id': 'heathrow_airport',                          'lat':  51.4700, 'lon':   -0.4543},
-    {'id': 'frankfurt_airport',                         'lat':  50.0379, 'lon':    8.5622},
-    {'id': 'dubai_international_airport',               'lat':  25.2532, 'lon':   55.3657},
-    {'id': 'chhatrapati_shivaji_maharaj_international', 'lat':  19.0896, 'lon':   72.8656},
-    {'id': 'singapore_changi_airport',                  'lat':   1.3644, 'lon':  103.9915},
-    {'id': 'haneda_airport',                            'lat':  35.5494, 'lon':  139.7798},
-    {'id': 'sydney_kingsford_smith_airport',            'lat': -33.9461, 'lon':  151.1772},
-    {'id': 'guarulhos_international_airport',           'lat': -23.4356, 'lon':  -46.4731},
-    {'id': 'or_tambo_international_airport',            'lat': -26.1367, 'lon':   28.2411},
-    {'id': 'jomo_kenyatta_international_airport',       'lat':  -1.3192, 'lon':   36.9275},
-    {'id': 'mexico_city_international_airport',         'lat':  19.4361, 'lon':  -99.0719},
-    {'id': 'toronto_pearson_international_airport',     'lat':  43.6777, 'lon':  -79.6248},
-]
+DEBUG = True
 
-OCEAN_PORTS = [
-    {'id': 'port_of_los_angeles',     'lat':  33.7361, 'lon': -118.2639},
-    {'id': 'port_of_new_york_and_nj', 'lat':  40.6681, 'lon':  -74.0455},
-    {'id': 'port_of_chicago',         'lat':  41.8800, 'lon':  -87.6200},
-    {'id': 'portmiami',               'lat':  25.7781, 'lon':  -80.1794},
-    {'id': 'port_of_seattle',         'lat':  47.6026, 'lon': -122.3382},
-    {'id': 'port_of_london',          'lat':  51.5074, 'lon':   -0.0174},
-    {'id': 'port_of_hamburg',         'lat':  53.5461, 'lon':    9.9661},
-    {'id': 'jebel_ali_port',          'lat':  25.0108, 'lon':   55.0617},
-    {'id': 'jawaharlal_nehru_port',   'lat':  18.9498, 'lon':   72.9483},
-    {'id': 'port_of_singapore',       'lat':   1.2644, 'lon':  103.8200},
-    {'id': 'port_of_tokyo',           'lat':  35.6296, 'lon':  139.7773},
-    {'id': 'port_botany',             'lat': -33.9656, 'lon':  151.2010},
-    {'id': 'port_of_santos',          'lat': -23.9608, 'lon':  -46.3288},
-    {'id': 'port_of_durban',          'lat': -29.8713, 'lon':   31.0262},
-    {'id': 'port_of_mombasa',         'lat':  -4.0435, 'lon':   39.6682},
-    {'id': 'port_of_toronto',         'lat':  43.6407, 'lon':  -79.3590},
-    {'id': 'port_of_veracruz',        'lat':  19.2010, 'lon':  -96.1342},
-]
+_PROXIMITY_M = 50.0
+_INFRA_M = 5000.0
+_ARRIVAL_M = 20000.0
+_BOX_VALUE = 1000.0
+_STUCK_TICKS = 50
+_LONG_ROUTE_KM = 4000.0
 
-SHIPPING_HUBS = [
-    {'id': 'los_angeles_distribution_center', 'lat':  33.9425, 'lon': -118.4081},
-    {'id': 'new_york_distribution_center',    'lat':  40.6413, 'lon':  -73.7781},
-    {'id': 'chicago_distribution_center',     'lat':  41.9742, 'lon':  -87.9073},
-    {'id': 'dallas_distribution_center',      'lat':  32.8481, 'lon':  -97.0403},
-    {'id': 'miami_distribution_center',       'lat':  25.7959, 'lon':  -80.2870},
-    {'id': 'seattle_distribution_center',     'lat':  47.4502, 'lon': -122.3088},
-    {'id': 'london_hub',                      'lat':  51.5074, 'lon':   -0.1278},
-    {'id': 'frankfurt_distribution_center',   'lat':  50.1109, 'lon':    8.6821},
-    {'id': 'dubai_hub',                       'lat':  25.2048, 'lon':   55.2708},
-    {'id': 'mumbai_distribution_center',      'lat':  19.0760, 'lon':   72.8777},
-    {'id': 'singapore_hub',                   'lat':   1.3521, 'lon':  103.8198},
-    {'id': 'tokyo_distribution_center',       'lat':  35.6762, 'lon':  139.6503},
-    {'id': 'sydney_hub',                      'lat': -33.8688, 'lon':  151.2093},
-    {'id': 'sao_paulo_distribution_center',   'lat': -23.5505, 'lon':  -46.6333},
-    {'id': 'johannesburg_hub',                'lat': -26.2041, 'lon':   28.0473},
-    {'id': 'nairobi_distribution_center',     'lat':  -1.2921, 'lon':   36.8219},
-    {'id': 'mexico_city_hub',                 'lat':  19.4326, 'lon':  -99.1332},
-    {'id': 'toronto_hub',                     'lat':  43.6532, 'lon':  -79.3832},
-]
+_vehicle_jobs = {}
+_box_memory = {}
 
-# Proximity thresholds (metres)
-LOAD_R          = 50.0
-ARRIVE_R        = 100.0
-INFRA_R         = 5_000.0
-
-# How often to run the dispatch pass, and vehicle selection thresholds
-ASSIGN_INTERVAL = 10
-TRAIN_MIN_BOXES = 30
-SHIP_MIN_BOXES  = 20
-
-# Canal waypoints for ships (Rarely Used)
-PANAMA      = (8.99,    -79.57)
-SUEZ        = (30.58,    32.26)
-
-# Land waypoints to keep trucks off water
-FLORIDA_GW  = (30.33,   -81.65)   # Jacksonville - Florida peninsula
-UPPER_CHINA = (43.8627,  118.754) # Inner Mongolia - Singapore <-> Tokyo
-CENT_AFRICA = (4.371,    33.366)  # South Sudan - Johannesburg <-> north
-EGYPT_GW    = (29.06,    40.00)   # Cairo - Nairobi <-> Dubai/Mumbai
-SAO_GW1     = (15.861,  -87.80)  # Guatemala - Central American land bridge
-SAO_GW2     = (30.50,  -113.50)   # SE New Mexico - Sao Paulo <-> North America
-
-# Tracks active vehicle plans and prevents double-dispatch
-itineraries: dict = {}
-claimed: set = set()
+OCEAN_WAYPOINTS = {
+    "panama": (9.08, -79.68),
+    "suez": (30.0, 32.55),
+    "gibraltar": (35.95, -5.6),
+    "malacca": (2.5, 101.5),
+    "good_hope": (-34.4, 18.5),
+    "horn": (-55.98, -67.27),
+    "bab_el": (12.58, 43.33),
+    "n_atlantic_w": (35.0, -60.0),
+    "n_atlantic_e": (45.0, -20.0),
+    "s_atlantic": (-20.0, -20.0),
+    "n_pacific_w": (35.0, 150.0),
+    "n_pacific_e": (35.0, -150.0),
+    "s_pacific": (-20.0, -140.0),
+    "n_indian": (10.0, 70.0),
+    "s_indian": (-20.0, 80.0),
+    "red_sea": (20.0, 38.0),
+    "med_east": (34.0, 25.0),
+    "caribbean": (15.0, -75.0),
+    "english_ch": (50.0, -2.0),
+    "north_sea": (56.0, 3.0),
+    "south_china": (15.0, 115.0),
+    "coral_sea": (-15.0, 155.0),
+}
 
 
-def step(sim_state):
-    """Main entry point called every tick."""
-    _run_vehicles(sim_state)
-    if sim_state.tick % ASSIGN_INTERVAL == 0:
-        _assign(sim_state)
+def log(*args):
+    if DEBUG:
+        print(*args)
 
 
-def _run_vehicles(sim_state):
-    """Advance each vehicle with an itinerary that has finished its last move."""
-    vehicles = sim_state.get_vehicles()
-    boxes = sim_state.get_boxes()
-
-    for vid, v in vehicles.items():
-        if v["destination"] is not None:
-            continue
-
-        itin = itineraries.get(vid)
-        if itin is None:
-            continue
-
-        loc = v["location"]
-
-        if itin["state"] == "TO_PICKUP":
-            dist = haversine_distance_meters(loc, itin["pickup_loc"])
-            if dist <= LOAD_R:
-                loadable = [
-                    b for b in itin["box_ids"]
-                    if b in boxes
-                       and not boxes[b]["delivered"]
-                       and boxes[b]["vehicle_id"] is None
-                ]
-                if loadable:
-                    try:
-                        sim_state.load_vehicle(vid, loadable)
-                        itin["box_ids"] = loadable
-                    except Exception:
-                        pass
-                itin["state"] = "TRANSIT"
-                _advance(sim_state, vid, itin)
-            else:
-                sim_state.move_vehicle(vid, itin["pickup_loc"])
-
-        elif itin["state"] == "TRANSIT":
-            if not itin["waypoints"]:
-                cargo = list(v["cargo"])
-                if cargo:
-                    try:
-                        sim_state.unload_vehicle(vid, cargo)
-                    except Exception:
-                        pass
-                # Unclaim boxes not yet delivered so the next leg can pick them up
-                for b in itin["box_ids"]:
-                    if b in boxes and not boxes[b]["delivered"]:
-                        claimed.discard(b)
-                del itineraries[vid]
-            else:
-                wp = itin["waypoints"][0]
-                dist = haversine_distance_meters(loc, wp)
-                if dist <= ARRIVE_R:
-                    itin["waypoints"].pop(0)
-                    _advance(sim_state, vid, itin)
-                else:
-                    sim_state.move_vehicle(vid, wp)
+def km(a, b):
+    return haversine_distance_meters(a, b) / 1000.0
 
 
-def _advance(sim_state, vid, itin):
-    """Issue the next move_vehicle call if waypoints remain."""
-    if itin["waypoints"]:
-        sim_state.move_vehicle(vid, itin["waypoints"][0])
+def nearest(loc, points):
+    if not points:
+        return None
+    return min(points, key=lambda p: km(loc, p))
 
 
-def _assign(sim_state):
-    """Group unassigned boxes by (location, destination) and dispatch largest clusters first."""
-    boxes = sim_state.get_boxes()
-
-    clusters: dict = {}
-    for b_id, box in boxes.items():
-        if box["delivered"] or box["vehicle_id"] is not None or b_id in claimed:
-            continue
-        key = (box["location"], box["destination"])
-        if key not in clusters:
-            clusters[key] = {"origin": box["location"], "dest": box["destination"], "box_ids": []}
-        clusters[key]["box_ids"].append(b_id)
-
-    for c in sorted(clusters.values(), key=lambda c: -len(c["box_ids"])):
-        _dispatch(sim_state, c)
+def near_enough(a, b, meters=_INFRA_M):
+    return b is not None and haversine_distance_meters(a, b) <= meters
 
 
-def _dispatch(sim_state, cluster):
-    """
-    Assign the best vehicle for a cluster based on where the boxes are and where they're going.
-    Three cases:
-      A — same region: direct ground transport
-      B — cross-region, at a port: ship (large batch) or plane (small batch)
-      C — cross-region, not at a port: drive to nearest same-region port first
-    """
-    origin = cluster["origin"]
-    dest = cluster["dest"]
-    box_ids = cluster["box_ids"]
-    n = len(box_ids)
-
-    if n == 0:
-        return False
-
-    src_region = _region(origin)
-    dst_region = _region(dest)
-    at_port = _near_any(origin, OCEAN_PORTS)
-
-    if src_region == dst_region:
-        vtype = VehicleType.Train if n >= TRAIN_MIN_BOXES else VehicleType.SemiTruck
-        selected = box_ids[:vtype.value.capacity]
-        vid = _find_idle_ground(sim_state, vtype, origin)
-        if not vid:
-            vid = _spawn(sim_state, vtype, _nearest(origin, SHIPPING_HUBS))
-        if not vid:
-            return False
-        claimed.update(selected)
-        itineraries[vid] = {
-            "state": "TO_PICKUP", "pickup_loc": origin,
-            "box_ids": selected, "waypoints": _land_wps(origin, dest) + [dest],
-        }
-        return True
-
-    elif at_port:
-        dst_port = _nearest(dest, OCEAN_PORTS)
-        if n >= SHIP_MIN_BOXES:
-            vtype = VehicleType.CargoShip
-            selected = box_ids[:vtype.value.capacity]
-            wps = _ocean_wps(origin, dst_port) + [dst_port]
-            spawn = origin
-        else:
-            vtype = VehicleType.Airplane
-            selected = box_ids[:vtype.value.capacity]
-            wps = [_nearest(dest, AIRPORTS)]
-            spawn = _nearest(origin, AIRPORTS)
-        vid = _spawn(sim_state, vtype, spawn)
-        if not vid:
-            return False
-        claimed.update(selected)
-        itineraries[vid] = {
-            "state": "TO_PICKUP", "pickup_loc": origin,
-            "box_ids": selected, "waypoints": wps,
-        }
-        return True
-
-    if emergency_mode:
-        score = net_value - (2.0 * cost_per_box)
-    else:
-        score = net_value - (4.0 * cost_per_box)
-
-    return {
-        "vehicle": vehicle_name,
-        "pickup_location": pickup_location,
-        "cluster_center": cluster["center"],
-        "stop_count": len(stops),
-        "stops": stops,
-        "box_count": box_count,
-        "box_ids": [box["id"] for box in selected_boxes],
-        "delivered_value": delivered_value,
-        "net_value": net_value,
-        "cost_per_box": cost_per_box,
-        "cheaper_surface_candidates": cheaper_surface_candidates,
-        "rejected": False,
-        "reject_reasons": reject_reasons,
-        "air_penalty": air_penalty,
-        "air_penalty_reasons": air_penalty_reasons,
-        "emergency_mode": emergency_mode,
-        "score": score,
-        **cost_details,
-        "total_cost": total_cost,
-    }
+def get_cfg(vehicle_type):
+    return vehicle_type.value
 
 
-def best_route_for_hub(hub, active_events=None, vehicle_start=None, allowed_vehicle_names=None, emergency_mode=False):
-    active_events = active_events or []
-    clusters = cluster_destinations(hub.destination_boxes)
-    start_location = hub.location if vehicle_start is None else vehicle_start
-
-    vehicle_names = list(VEHICLE_STATS.keys())
-    if allowed_vehicle_names is not None:
-        vehicle_names = [v for v in vehicle_names if v in allowed_vehicle_names]
-
-    best = None
-
-    for cluster in clusters:
-        candidates = []
-
-        for vehicle_name in vehicle_names:
-            details = score_cluster_route_details(
-                vehicle_start=start_location,
-                pickup_location=hub.location,
-                cluster=cluster,
-                vehicle_name=vehicle_name,
-                active_events=active_events,
-                include_base_cost=True,
-                emergency_mode=emergency_mode,
-            )
-
-            if details is None:
-                continue
-
-            candidates.append(details)
-
-        if not candidates:
-            log(
-                "HUB_CLUSTER_NO_ROUTE",
-                "hub=", hub.location,
-                "cluster_center=", cluster["center"],
-                "emergency_mode=", emergency_mode,
-                "cluster_box_count=", len(cluster["boxes"]),
-            )
-            continue
-
-        candidates.sort(key=lambda d: (d["score"], -d["total_cost"]), reverse=True)
-        cluster_best = candidates[0]
-
-        if best is None or cluster_best["score"] > best["score"]:
-            best = cluster_best
-
-    if best is None and not emergency_mode:
-        return best_route_for_hub(
-            hub,
-            active_events=active_events,
-            vehicle_start=vehicle_start,
-            allowed_vehicle_names=allowed_vehicle_names,
-            emergency_mode=True,
-        )
-
-    return best
+def vehicle_mode(vehicle_type):
+    if vehicle_type == VehicleType.CargoShip:
+        return "ocean"
+    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
+        return "land"
+    return "air"
 
 
-def build_hubs(boxes):
-    hubs = {}
-
+def rebuild_clusters(boxes):
+    clusters = {}
     for box in boxes.values():
         if box["delivered"]:
             continue
         if box["vehicle_id"] is not None:
             continue
-
-        location = box["location"]
-        if location not in hubs:
-            hubs[location] = Hub(location)
-        hubs[location].add_box(box)
-
-    return hubs
+        key = (box["location"], box["destination"])
+        clusters.setdefault(key, []).append(box["id"])
+    return clusters
 
 
-def refresh_hub_scores(hubs, active_events):
-    for hub in hubs.values():
-        best = best_route_for_hub(hub, active_events=active_events)
-        if best is None:
-            hub.score = float("-inf")
-            hub.score_details = {}
-        else:
-            hub.score = best["score"]
-            hub.score_details = best
+def update_box_memory(boxes, tick):
+    seen = set()
 
+    for bid, box in boxes.items():
+        seen.add(bid)
 
-def at_location(a, b, threshold_m=_PROXIMITY_M):
-    return distance_m(a, b) <= threshold_m
-
-
-def box_ids_still_available(boxes, box_ids, location=None):
-    valid = []
-    for box_id in box_ids:
-        if box_id not in boxes:
-            continue
-        box = boxes[box_id]
         if box["delivered"]:
-            continue
-        if box["vehicle_id"] is not None:
-            continue
-        if location is not None and box["location"] != location:
-            continue
-        valid.append(box_id)
-    return valid
-
-
-def normalize_vehicle_name(vehicle_type_value):
-    if isinstance(vehicle_type_value, str):
-        return vehicle_type_value
-
-    for name, enum_value in VEHICLE_ENUM.items():
-        if vehicle_type_value == enum_value:
-            return name
-
-    text = str(vehicle_type_value)
-    for name in VEHICLE_STATS:
-        if name in text:
-            return name
-
-    return text
-
-
-def build_plan_from_best(best, hub_location, vehicle_name):
-    return {
-        "phase": "to_pickup",
-        "hub_location": hub_location,
-        "pickup_location": hub_location,
-        "vehicle_name": vehicle_name,
-        "stops": [{"location": s["location"], "box_ids": list(s["box_ids"])} for s in best["stops"]],
-        "current_stop_index": 0,
-    }
-
-
-def clear_vehicle_hub_claim(vehicle_id):
-    to_remove = []
-    for hub_location, claimed_vehicle_id in DISPATCH_STATE["hub_vehicles"].items():
-        if claimed_vehicle_id == vehicle_id:
-            to_remove.append(hub_location)
-    for hub_location in to_remove:
-        DISPATCH_STATE["hub_vehicles"].pop(hub_location, None)
-
-
-def claim_hub_for_vehicle(hub_location, vehicle_id):
-    clear_vehicle_hub_claim(vehicle_id)
-    DISPATCH_STATE["hub_vehicles"][hub_location] = vehicle_id
-
-
-def try_create_best_vehicle(sim_state, hub, active_events):
-    best = best_route_for_hub(hub, active_events=active_events)
-    if best is None:
-        log("CREATE_SKIP", "hub=", hub.location, "reason=no_best_route")
-        return None
-
-    vehicle_name = best["vehicle"]
-
-    try:
-        vehicle_id = sim_state.create_vehicle(VEHICLE_ENUM[vehicle_name], hub.location)
-        DISPATCH_STATE["vehicle_plans"][vehicle_id] = build_plan_from_best(best, hub.location, vehicle_name)
-        claim_hub_for_vehicle(hub.location, vehicle_id)
-        sim_state.move_vehicle(vehicle_id, hub.location)
-        log(
-            "CREATE_VEHICLE",
-            "vehicle_id=", vehicle_id,
-            "vehicle=", vehicle_name,
-            "hub=", hub.location,
-            "score=", best["score"],
-            "box_count=", best["box_count"],
-            "cost=", best["total_cost"],
-            "cost_per_box=", best["cost_per_box"],
-            "net_value=", best["net_value"],
-            "route_km=", best["total_route_distance_km"],
-            "surface_candidates=", best.get("cheaper_surface_candidates"),
-        )
-        return vehicle_id
-    except ValueError as e:
-        log("CREATE_FAIL", "hub=", hub.location, "vehicle=", vehicle_name, "error=", e)
-        return None
-
-
-def assign_plan_to_vehicle_from_current_location(sim_state, vehicle_id, vehicle, hubs, active_events):
-    vehicle_location = vehicle["location"]
-    vehicle_name = normalize_vehicle_name(vehicle["vehicle_type"])
-    best_overall = None
-    best_hub = None
-
-    for hub in hubs.values():
-        if hub.cargo_count <= 0:
+            _box_memory.pop(bid, None)
             continue
 
-        best = best_route_for_hub(
-            hub,
-            active_events=active_events,
-            vehicle_start=vehicle_location,
-            allowed_vehicle_names=[vehicle_name],
+        signature = (
+            box["location"],
+            box["vehicle_id"],
         )
 
-        if best is None:
+        if bid not in _box_memory:
+            _box_memory[bid] = {
+                "last_signature": signature,
+                "last_moved_tick": tick,
+            }
             continue
 
-        if best_overall is None or best["score"] > best_overall["score"]:
-            best_overall = best
-            best_hub = hub
+        if _box_memory[bid]["last_signature"] != signature:
+            _box_memory[bid]["last_signature"] = signature
+            _box_memory[bid]["last_moved_tick"] = tick
 
-    if best_overall is None or best_hub is None:
-        log(
-            "REASSIGN_SKIP",
-            "vehicle_id=", vehicle_id,
-            "vehicle=", vehicle_name,
-            "location=", vehicle_location,
-            "reason=no_reachable_hub",
-        )
+    for bid in list(_box_memory.keys()):
+        if bid not in seen:
+            _box_memory.pop(bid, None)
+
+
+def cluster_is_stuck(box_ids, tick):
+    if not box_ids:
         return False
-
-    DISPATCH_STATE["vehicle_plans"][vehicle_id] = build_plan_from_best(best_overall, best_hub.location, vehicle_name)
-    claim_hub_for_vehicle(best_hub.location, vehicle_id)
-
-    log(
-        "REASSIGN",
-        "vehicle_id=", vehicle_id,
-        "vehicle=", vehicle_name,
-        "from=", vehicle_location,
-        "to_hub=", best_hub.location,
-        "score=", best_overall["score"],
-        "cost=", best_overall["total_cost"],
-        "cost_per_box=", best_overall["cost_per_box"],
-        "boxes=", best_overall["box_count"],
-        "stops=", [s["location"] for s in best_overall["stops"]],
-    )
-
-    if not at_location(vehicle_location, best_hub.location):
-        try:
-            sim_state.move_vehicle(vehicle_id, best_hub.location)
-            log("MOVE_TO_PICKUP", "vehicle_id=", vehicle_id, "target=", best_hub.location)
-        except ValueError as e:
-            log("MOVE_TO_PICKUP_FAIL", "vehicle_id=", vehicle_id, "target=", best_hub.location, "error=", e)
-
+    for bid in box_ids:
+        mem = _box_memory.get(bid)
+        if mem is None:
+            return False
+        if tick - mem["last_moved_tick"] < _STUCK_TICKS:
+            return False
     return True
 
 
-def process_vehicle_plan(sim_state, vehicle_id, vehicle, boxes):
-    plan = DISPATCH_STATE["vehicle_plans"].get(vehicle_id)
-    if plan is None:
-        log("PLAN_NONE", "vehicle_id=", vehicle_id)
-        return
-
-    current_location = vehicle["location"]
-    pickup_location = plan["pickup_location"]
-    vehicle_name = plan["vehicle_name"]
-    stops = plan["stops"]
-
-    log(
-        "PLAN_STATUS",
-        "vehicle_id=", vehicle_id,
-        "vehicle=", vehicle_name,
-        "phase=", plan["phase"],
-        "location=", current_location,
-        "pickup=", pickup_location,
-        "stop_index=", plan.get("current_stop_index"),
-        "cargo=", list(vehicle["cargo"]),
-    )
-
-    if plan["phase"] == "to_pickup":
-        if at_location(current_location, pickup_location):
-            all_box_ids = []
-            for stop in stops:
-                all_box_ids.extend(stop["box_ids"])
-
-            available_box_ids = box_ids_still_available(boxes, all_box_ids, location=pickup_location)
-
-            log(
-                "AT_PICKUP",
-                "vehicle_id=", vehicle_id,
-                "pickup=", pickup_location,
-                "requested_box_ids=", all_box_ids,
-                "available_box_ids=", available_box_ids,
-            )
-
-            if available_box_ids:
-                try:
-                    sim_state.load_vehicle(vehicle_id, available_box_ids)
-                    log("LOAD_OK", "vehicle_id=", vehicle_id, "box_ids=", available_box_ids)
-                except ValueError as e:
-                    reduced = available_box_ids[:max(1, min(len(available_box_ids), VEHICLE_STATS[vehicle_name]["capacity"]))]
-                    log("LOAD_FAIL", "vehicle_id=", vehicle_id, "error=", e, "retry_box_ids=", reduced)
-                    try:
-                        sim_state.load_vehicle(vehicle_id, reduced)
-                        available_box_ids = reduced
-                        log("LOAD_RETRY_OK", "vehicle_id=", vehicle_id, "box_ids=", available_box_ids)
-                    except ValueError as e2:
-                        available_box_ids = []
-                        log("LOAD_RETRY_FAIL", "vehicle_id=", vehicle_id, "error=", e2)
-
-            filtered_stops = []
-            for stop in stops:
-                kept_ids = [box_id for box_id in stop["box_ids"] if box_id in available_box_ids]
-                if kept_ids:
-                    filtered_stops.append({
-                        "location": stop["location"],
-                        "box_ids": kept_ids,
-                    })
-
-            if not filtered_stops:
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("PLAN_IDLE_NO_BOXES", "vehicle_id=", vehicle_id)
-                return
-
-            plan["stops"] = filtered_stops
-            plan["current_stop_index"] = 0
-            first_stop = plan["stops"][0]["location"]
-
-            if not is_route_allowed(pickup_location, first_stop, vehicle_name):
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("PLAN_IDLE_BAD_ROUTE_FIRST_STOP", "vehicle_id=", vehicle_id, "from=", pickup_location, "to=", first_stop)
-                return
-
-            plan["phase"] = "to_dropoff"
-            try:
-                sim_state.move_vehicle(vehicle_id, first_stop)
-                log("MOVE_TO_FIRST_STOP", "vehicle_id=", vehicle_id, "target=", first_stop)
-            except ValueError as e:
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("MOVE_TO_FIRST_STOP_FAIL", "vehicle_id=", vehicle_id, "target=", first_stop, "error=", e)
-        else:
-            try:
-                sim_state.move_vehicle(vehicle_id, pickup_location)
-                log("MOVE_TO_PICKUP_CONTINUE", "vehicle_id=", vehicle_id, "target=", pickup_location)
-            except ValueError as e:
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("MOVE_TO_PICKUP_CONTINUE_FAIL", "vehicle_id=", vehicle_id, "target=", pickup_location, "error=", e)
-        return
-
-    if plan["phase"] == "to_dropoff":
-        idx = plan["current_stop_index"]
-        if idx >= len(plan["stops"]):
-            plan["phase"] = "idle"
-            clear_vehicle_hub_claim(vehicle_id)
-            log("PLAN_IDLE_DONE_INDEX", "vehicle_id=", vehicle_id)
-            return
-
-        stop = plan["stops"][idx]
-        stop_location = stop["location"]
-
-        prev_location = pickup_location if idx == 0 else plan["stops"][idx - 1]["location"]
-        if not is_route_allowed(prev_location, stop_location, vehicle_name):
-            plan["phase"] = "idle"
-            clear_vehicle_hub_claim(vehicle_id)
-            log("PLAN_IDLE_BAD_ROUTE_STOP", "vehicle_id=", vehicle_id, "from=", prev_location, "to=", stop_location)
-            return
-
-        if at_location(current_location, stop_location):
-            cargo_ids = set(vehicle["cargo"])
-            unload_ids = [box_id for box_id in stop["box_ids"] if box_id in cargo_ids]
-
-            log(
-                "AT_DROPOFF",
-                "vehicle_id=", vehicle_id,
-                "stop=", stop_location,
-                "planned_box_ids=", stop["box_ids"],
-                "cargo_box_ids=", list(cargo_ids),
-                "unload_ids=", unload_ids,
-            )
-
-            if unload_ids:
-                try:
-                    sim_state.unload_vehicle(vehicle_id, unload_ids)
-                    log("UNLOAD_OK", "vehicle_id=", vehicle_id, "box_ids=", unload_ids)
-                except ValueError as e:
-                    log("UNLOAD_FAIL", "vehicle_id=", vehicle_id, "box_ids=", unload_ids, "error=", e)
-
-            plan["current_stop_index"] += 1
-
-            if plan["current_stop_index"] >= len(plan["stops"]):
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("PLAN_IDLE_ROUTE_COMPLETE", "vehicle_id=", vehicle_id)
-                return
-
-            next_stop = plan["stops"][plan["current_stop_index"]]["location"]
-            if not is_route_allowed(stop_location, next_stop, vehicle_name):
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("PLAN_IDLE_BAD_ROUTE_NEXT", "vehicle_id=", vehicle_id, "from=", stop_location, "to=", next_stop)
-                return
-
-            try:
-                sim_state.move_vehicle(vehicle_id, next_stop)
-                log("MOVE_TO_NEXT_STOP", "vehicle_id=", vehicle_id, "target=", next_stop)
-            except ValueError as e:
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("MOVE_TO_NEXT_STOP_FAIL", "vehicle_id=", vehicle_id, "target=", next_stop, "error=", e)
-        else:
-            try:
-                sim_state.move_vehicle(vehicle_id, stop_location)
-                log("MOVE_TO_DROPOFF_CONTINUE", "vehicle_id=", vehicle_id, "target=", stop_location)
-            except ValueError as e:
-                plan["phase"] = "idle"
-                clear_vehicle_hub_claim(vehicle_id)
-                log("MOVE_TO_DROPOFF_CONTINUE_FAIL", "vehicle_id=", vehicle_id, "target=", stop_location, "error=", e)
-        return
-
-    if plan["phase"] == "idle":
-        log("PLAN_IDLE", "vehicle_id=", vehicle_id, "location=", current_location)
-
-
-def step(sim_state):
-    tick = sim_state.tick
-    boxes = sim_state.get_boxes()
-    vehicles = sim_state.get_vehicles()
-
-    log("\n==============================")
-    log("TICK", tick)
-    log("BOX_COUNT", len(boxes))
-    log("VEHICLE_COUNT", len(vehicles))
-
-    try:
-        active_events = sim_state.get_active_events()
-        if not active_events:
-            log("get_active_events exists but returned empty list")
-        else:
-            log("ACTIVE_EVENTS", active_events)
-    except AttributeError:
-        active_events = []
-        log("get_active_events endpoint does not exist")
-
-    emergency_mode = update_stall_state(boxes)
-
-    hubs = build_hubs(boxes)
-    refresh_hub_scores(hubs, active_events)
-
-    log("STALL_TICKS", DISPATCH_STATE["stalled_ticks"])
-    log("EMERGENCY_MODE", emergency_mode)
-    log("HUB_COUNT", len(hubs))
-    for location, hub in hubs.items():
-        log(
-            "HUB",
-            "location=", location,
-            "cargo_count=", hub.cargo_count,
-            "score=", hub.score,
-            "best_vehicle=", hub.score_details.get("vehicle"),
-            "best_boxes=", hub.score_details.get("box_count"),
-            "best_cost=", hub.score_details.get("total_cost"),
-            "best_cost_per_box=", hub.score_details.get("cost_per_box"),
-            "best_stops=", [s["location"] for s in hub.score_details.get("stops", [])],
-        )
-
-    for vehicle_id, vehicle in vehicles.items():
-        log(
-            "VEHICLE_BEFORE",
-            "vehicle_id=", vehicle_id,
-            "type=", normalize_vehicle_name(vehicle["vehicle_type"]),
-            "location=", vehicle["location"],
-            "cargo=", list(vehicle["cargo"]),
-            "plan=", DISPATCH_STATE["vehicle_plans"].get(vehicle_id),
-        )
-        process_vehicle_plan(sim_state, vehicle_id, vehicle, boxes)
-
-    vehicles = sim_state.get_vehicles()
-
-    for vehicle_id, vehicle in vehicles.items():
-        plan = DISPATCH_STATE["vehicle_plans"].get(vehicle_id)
-        if plan is None or plan.get("phase") == "idle":
-            assign_plan_to_vehicle_from_current_location(sim_state, vehicle_id, vehicle, hubs, active_events)
-
-    vehicles = sim_state.get_vehicles()
-    sorted_hubs = sorted(hubs.values(), key=lambda h: h.score, reverse=True)
-
-    for hub in sorted_hubs:
-        if hub.cargo_count <= 0:
-            continue
-
-        assigned_vehicle_id = DISPATCH_STATE["hub_vehicles"].get(hub.location)
-
-        if assigned_vehicle_id is not None and assigned_vehicle_id not in vehicles:
-            log("HUB_CLAIM_STALE", "hub=", hub.location, "vehicle_id=", assigned_vehicle_id)
-            DISPATCH_STATE["hub_vehicles"].pop(hub.location, None)
-            DISPATCH_STATE["vehicle_plans"].pop(assigned_vehicle_id, None)
-            assigned_vehicle_id = None
-
-        if assigned_vehicle_id is None:
-            log("HUB_UNCLAIMED", "hub=", hub.location, "cargo_count=", hub.cargo_count, "score=", hub.score)
-            try_create_best_vehicle(sim_state, hub, active_events)
-            continue
-
-        plan = DISPATCH_STATE["vehicle_plans"].get(assigned_vehicle_id)
-        if plan is None:
-            log("HUB_PLAN_MISSING", "hub=", hub.location, "vehicle_id=", assigned_vehicle_id)
-            DISPATCH_STATE["hub_vehicles"].pop(hub.location, None)
-            try_create_best_vehicle(sim_state, hub, active_events)
-            continue
-
-        log(
-            "HUB_CLAIMED",
-            "hub=", hub.location,
-            "vehicle_id=", assigned_vehicle_id,
-            "phase=", plan.get("phase"),
-        )
-
-    if tick == 0:
-        log("=== INITIAL HUB SNAPSHOT ===")
-        for location, hub in hubs.items():
-            log(location, hub)
-
-AIRPORTS = [
-    {'id': 'los_angeles_international_airport',         'lat':  33.9425, 'lon': -118.4081},
-    {'id': 'john_f_kennedy_international_airport',      'lat':  40.6413, 'lon':  -73.7781},
-    {'id': 'ohare_international_airport',               'lat':  41.9742, 'lon':  -87.9073},
-    {'id': 'dallas_fort_worth_international_airport',   'lat':  32.8998, 'lon':  -97.0403},
-    {'id': 'miami_international_airport',               'lat':  25.7959, 'lon':  -80.2870},
-    {'id': 'seattle_tacoma_international_airport',      'lat':  47.4502, 'lon': -122.3088},
-    {'id': 'heathrow_airport',                          'lat':  51.4700, 'lon':   -0.4543},
-    {'id': 'frankfurt_airport',                         'lat':  50.0379, 'lon':    8.5622},
-    {'id': 'dubai_international_airport',               'lat':  25.2532, 'lon':   55.3657},
-    {'id': 'chhatrapati_shivaji_maharaj_international', 'lat':  19.0896, 'lon':   72.8656},
-    {'id': 'singapore_changi_airport',                  'lat':   1.3644, 'lon':  103.9915},
-    {'id': 'haneda_airport',                            'lat':  35.5494, 'lon':  139.7798},
-    {'id': 'sydney_kingsford_smith_airport',            'lat': -33.9461, 'lon':  151.1772},
-    {'id': 'guarulhos_international_airport',           'lat': -23.4356, 'lon':  -46.4731},
-    {'id': 'or_tambo_international_airport',            'lat': -26.1367, 'lon':   28.2411},
-    {'id': 'jomo_kenyatta_international_airport',       'lat':  -1.3192, 'lon':   36.9275},
-    {'id': 'mexico_city_international_airport',         'lat':  19.4361, 'lon':  -99.0719},
-    {'id': 'toronto_pearson_international_airport',     'lat':  43.6777, 'lon':  -79.6248},
-]
-
-OCEAN_PORTS = [
-    {'id': 'port_of_los_angeles',     'lat':  33.7361, 'lon': -118.2639},
-    {'id': 'port_of_new_york_and_nj', 'lat':  40.6681, 'lon':  -74.0455},
-    {'id': 'port_of_chicago',         'lat':  41.8800, 'lon':  -87.6200},
-    {'id': 'portmiami',               'lat':  25.7781, 'lon':  -80.1794},
-    {'id': 'port_of_seattle',         'lat':  47.6026, 'lon': -122.3382},
-    {'id': 'port_of_london',          'lat':  51.5074, 'lon':   -0.0174},
-    {'id': 'port_of_hamburg',         'lat':  53.5461, 'lon':    9.9661},
-    {'id': 'jebel_ali_port',          'lat':  25.0108, 'lon':   55.0617},
-    {'id': 'jawaharlal_nehru_port',   'lat':  18.9498, 'lon':   72.9483},
-    {'id': 'port_of_singapore',       'lat':   1.2644, 'lon':  103.8200},
-    {'id': 'port_of_tokyo',           'lat':  35.6296, 'lon':  139.7773},
-    {'id': 'port_botany',             'lat': -33.9656, 'lon':  151.2010},
-    {'id': 'port_of_santos',          'lat': -23.9608, 'lon':  -46.3288},
-    {'id': 'port_of_durban',          'lat': -29.8713, 'lon':   31.0262},
-    {'id': 'port_of_mombasa',         'lat':  -4.0435, 'lon':   39.6682},
-    {'id': 'port_of_toronto',         'lat':  43.6407, 'lon':  -79.3590},
-    {'id': 'port_of_veracruz',        'lat':  19.2010, 'lon':  -96.1342},
-]
-
-SHIPPING_HUBS = [
-    {'id': 'los_angeles_distribution_center', 'lat':  33.9425, 'lon': -118.4081},
-    {'id': 'new_york_distribution_center',    'lat':  40.6413, 'lon':  -73.7781},
-    {'id': 'chicago_distribution_center',     'lat':  41.9742, 'lon':  -87.9073},
-    {'id': 'dallas_distribution_center',      'lat':  32.8481, 'lon':  -97.0403},
-    {'id': 'miami_distribution_center',       'lat':  25.7959, 'lon':  -80.2870},
-    {'id': 'seattle_distribution_center',     'lat':  47.4502, 'lon': -122.3088},
-    {'id': 'london_hub',                      'lat':  51.5074, 'lon':   -0.1278},
-    {'id': 'frankfurt_distribution_center',   'lat':  50.1109, 'lon':    8.6821},
-    {'id': 'dubai_hub',                       'lat':  25.2048, 'lon':   55.2708},
-    {'id': 'mumbai_distribution_center',      'lat':  19.0760, 'lon':   72.8777},
-    {'id': 'singapore_hub',                   'lat':   1.3521, 'lon':  103.8198},
-    {'id': 'tokyo_distribution_center',       'lat':  35.6762, 'lon':  139.6503},
-    {'id': 'sydney_hub',                      'lat': -33.8688, 'lon':  151.2093},
-    {'id': 'sao_paulo_distribution_center',   'lat': -23.5505, 'lon':  -46.6333},
-    {'id': 'johannesburg_hub',                'lat': -26.2041, 'lon':   28.0473},
-    {'id': 'nairobi_distribution_center',     'lat':  -1.2921, 'lon':   36.8219},
-    {'id': 'mexico_city_hub',                 'lat':  19.4326, 'lon':  -99.1332},
-    {'id': 'toronto_hub',                     'lat':  43.6532, 'lon':  -79.3832},
-]
-
-# Proximity thresholds (metres)
-LOAD_R          = 50.0
-ARRIVE_R        = 100.0
-INFRA_R         = 5_000.0
-
-# How often to run the dispatch pass, and vehicle selection thresholds
-ASSIGN_INTERVAL = 10
-TRAIN_MIN_BOXES = 30
-SHIP_MIN_BOXES  = 20
-
-# Canal waypoints for ships (Rarely Used)
-PANAMA      = (8.99,    -79.57)
-SUEZ        = (30.58,    32.26)
-
-# Land waypoints to keep trucks off water
-FLORIDA_GW  = (30.33,   -81.65)   # Jacksonville - Florida peninsula
-UPPER_CHINA = (43.8627,  118.754) # Inner Mongolia - Singapore <-> Tokyo
-CENT_AFRICA = (4.371,    33.366)  # South Sudan - Johannesburg <-> north
-EGYPT_GW    = (29.06,    40.00)   # Cairo - Nairobi <-> Dubai/Mumbai
-SAO_GW1     = (15.861,  -87.80)  # Guatemala - Central American land bridge
-SAO_GW2     = (30.50,  -113.50)   # SE New Mexico - Sao Paulo <-> North America
-
-# Tracks active vehicle plans and prevents double-dispatch
-itineraries: dict = {}
-claimed: set = set()
-
-
-def step(sim_state):
-    """Main entry point called every tick."""
-    _run_vehicles(sim_state)
-    if sim_state.tick % ASSIGN_INTERVAL == 0:
-        _assign(sim_state)
-
-
-def _run_vehicles(sim_state):
-    """Advance each vehicle with an itinerary that has finished its last move."""
-    vehicles = sim_state.get_vehicles()
-    boxes = sim_state.get_boxes()
-
-    for vid, v in vehicles.items():
-        if v["destination"] is not None:
-            continue
-
-        itin = itineraries.get(vid)
-        if itin is None:
-            continue
-
-        loc = v["location"]
-
-        if itin["state"] == "TO_PICKUP":
-            dist = haversine_distance_meters(loc, itin["pickup_loc"])
-            if dist <= LOAD_R:
-                loadable = [
-                    b for b in itin["box_ids"]
-                    if b in boxes
-                       and not boxes[b]["delivered"]
-                       and boxes[b]["vehicle_id"] is None
-                ]
-                if loadable:
-                    try:
-                        sim_state.load_vehicle(vid, loadable)
-                        itin["box_ids"] = loadable
-                    except Exception:
-                        pass
-                itin["state"] = "TRANSIT"
-                _advance(sim_state, vid, itin)
-            else:
-                sim_state.move_vehicle(vid, itin["pickup_loc"])
-
-        elif itin["state"] == "TRANSIT":
-            if not itin["waypoints"]:
-                cargo = list(v["cargo"])
-                if cargo:
-                    try:
-                        sim_state.unload_vehicle(vid, cargo)
-                    except Exception:
-                        pass
-                # Unclaim boxes not yet delivered so the next leg can pick them up
-                for b in itin["box_ids"]:
-                    if b in boxes and not boxes[b]["delivered"]:
-                        claimed.discard(b)
-                del itineraries[vid]
-            else:
-                wp = itin["waypoints"][0]
-                dist = haversine_distance_meters(loc, wp)
-                if dist <= ARRIVE_R:
-                    itin["waypoints"].pop(0)
-                    _advance(sim_state, vid, itin)
-                else:
-                    sim_state.move_vehicle(vid, wp)
-
-
-def _advance(sim_state, vid, itin):
-    """Issue the next move_vehicle call if waypoints remain."""
-    if itin["waypoints"]:
-        sim_state.move_vehicle(vid, itin["waypoints"][0])
-
-
-def _assign(sim_state):
-    """Group unassigned boxes by (location, destination) and dispatch largest clusters first."""
-    boxes = sim_state.get_boxes()
-
-    clusters: dict = {}
-    for b_id, box in boxes.items():
-        if box["delivered"] or box["vehicle_id"] is not None or b_id in claimed:
-            continue
-        key = (box["location"], box["destination"])
-        if key not in clusters:
-            clusters[key] = {"origin": box["location"], "dest": box["destination"], "box_ids": []}
-        clusters[key]["box_ids"].append(b_id)
-
-    for c in sorted(clusters.values(), key=lambda c: -len(c["box_ids"])):
-        _dispatch(sim_state, c)
-
-
-def _dispatch(sim_state, cluster):
-    """
-    Assign the best vehicle for a cluster based on where the boxes are and where they're going.
-    Three cases:
-      A — same region: direct ground transport
-      B — cross-region, at a port: ship (large batch) or plane (small batch)
-      C — cross-region, not at a port: drive to nearest same-region port first
-    """
-    origin = cluster["origin"]
-    dest = cluster["dest"]
-    box_ids = cluster["box_ids"]
-    n = len(box_ids)
-
-    if n == 0:
-        return False
-
-    src_region = _region(origin)
-    dst_region = _region(dest)
-    at_port = _near_any(origin, OCEAN_PORTS)
-
-    if src_region == dst_region:
-        vtype = VehicleType.Train if n >= TRAIN_MIN_BOXES else VehicleType.SemiTruck
-        selected = box_ids[:vtype.value.capacity]
-        vid = _find_idle_ground(sim_state, vtype, origin)
-        if not vid:
-            vid = _spawn(sim_state, vtype, _nearest(origin, SHIPPING_HUBS))
-        if not vid:
+def path_km(path):
+    total = 0.0
+    for i in range(len(path) - 1):
+        total += km(path[i], path[i + 1])
+    return total
+
+
+def chain_waypoints(origin_port, dest_port):
+    path = [origin_port]
+    current = origin_port
+    used = set()
+
+    while True:
+        direct = km(current, dest_port)
+        best_name = None
+        best_total = direct
+
+        for name, wp in OCEAN_WAYPOINTS.items():
+            if name in used:
+                continue
+            if km(wp, dest_port) >= direct:
+                continue
+            total = km(current, wp) + km(wp, dest_port)
+            if total < best_total:
+                best_total = total
+                best_name = name
+
+        if best_name is None:
+            break
+
+        used.add(best_name)
+        current = OCEAN_WAYPOINTS[best_name]
+        path.append(current)
+
+    path.append(dest_port)
+    return path
+
+
+def build_ship_path(origin, dest, ocean_ports):
+    if not ocean_ports:
+        return None
+
+    origin_port = nearest(origin, ocean_ports)
+    dest_port = nearest(dest, ocean_ports)
+
+    if origin_port is None or dest_port is None:
+        return None
+    if not near_enough(origin, origin_port):
+        return None
+    if not near_enough(dest, dest_port):
+        return None
+
+    ship_path = chain_waypoints(origin_port, dest_port)
+
+    return {
+        "origin_port": origin_port,
+        "dest_port": dest_port,
+        "path": ship_path,
+        "path_km": path_km(ship_path),
+    }
+
+
+def estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_hubs):
+    cfg = get_cfg(vehicle_type)
+    rate = getattr(cfg, "terrain_penalty_per_km", 0.0)
+    d = km(origin, dest)
+
+    if vehicle_type in (VehicleType.Airplane, VehicleType.Drone):
+        return 0.0
+
+    if vehicle_type == VehicleType.CargoShip:
+        ship_info = build_ship_path(origin, dest, ocean_ports)
+        if ship_info is None:
+            return float("inf")
+        return 0.0
+
+    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
+        if not shipping_hubs:
+            return float("inf")
+        oh = nearest(origin, shipping_hubs)
+        dh = nearest(dest, shipping_hubs)
+        if oh is None or dh is None:
+            return float("inf")
+        if not near_enough(origin, oh) or not near_enough(dest, dh):
+            return float("inf")
+
+        origin_near_port = False
+        dest_near_port = False
+        if ocean_ports:
+            op = nearest(origin, ocean_ports)
+            dp = nearest(dest, ocean_ports)
+            origin_near_port = near_enough(origin, op)
+            dest_near_port = near_enough(dest, dp)
+
+        water_guess_km = 0.0
+        if d > 2500 and origin_near_port and dest_near_port:
+            water_guess_km = d * 0.65
+        elif d > 1500 and origin_near_port and dest_near_port:
+            water_guess_km = d * 0.35
+        elif d > 3000:
+            water_guess_km = d * 0.15
+
+        return water_guess_km * rate
+
+    return float("inf")
+
+
+def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shipping_hubs):
+    d = km(origin, dest)
+
+    if vehicle_type == VehicleType.CargoShip:
+        ship_info = build_ship_path(origin, dest, ocean_ports)
+        return ship_info is not None
+
+    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
+        if not shipping_hubs:
             return False
-        claimed.update(selected)
-        itineraries[vid] = {
-            "state": "TO_PICKUP", "pickup_loc": origin,
-            "box_ids": selected, "waypoints": _land_wps(origin, dest) + [dest],
-        }
+
+        oh = nearest(origin, shipping_hubs)
+        dh = nearest(dest, shipping_hubs)
+
+        if oh is None or dh is None:
+            return False
+
+        if not near_enough(origin, oh):
+            return False
+
+        if not near_enough(dest, dh):
+            return False
+
+        if d >= _LONG_ROUTE_KM:
+            return False
+
+        origin_port = nearest(origin, ocean_ports) if ocean_ports else None
+        dest_port = nearest(dest, ocean_ports) if ocean_ports else None
+
+        origin_near_port = near_enough(origin, origin_port) if origin_port is not None else False
+        dest_near_port = near_enough(dest, dest_port) if dest_port is not None else False
+
+        if origin_near_port and dest_near_port and d >= 1200:
+            return False
+
         return True
 
-    elif at_port:
-        dst_port = _nearest(dest, OCEAN_PORTS)
-        if n >= SHIP_MIN_BOXES:
-            vtype = VehicleType.CargoShip
-            selected = box_ids[:vtype.value.capacity]
-            wps = _ocean_wps(origin, dst_port) + [dst_port]
-            spawn = origin
-        else:
-            vtype = VehicleType.Airplane
-            selected = box_ids[:vtype.value.capacity]
-            wps = [_nearest(dest, AIRPORTS)]
-            spawn = _nearest(origin, AIRPORTS)
-        vid = _spawn(sim_state, vtype, spawn)
-        if not vid:
+    if vehicle_type == VehicleType.Airplane:
+        if not airports:
             return False
-        claimed.update(selected)
-        itineraries[vid] = {
-            "state": "TO_PICKUP", "pickup_loc": origin,
-            "box_ids": selected, "waypoints": wps,
-        }
+
+        oa = nearest(origin, airports)
+        da = nearest(dest, airports)
+
+        if oa is None or da is None:
+            return False
+
+        return near_enough(origin, oa) and near_enough(dest, da)
+
+    if vehicle_type == VehicleType.Drone:
+        if not shipping_hubs:
+            return False
+
+        oh = nearest(origin, shipping_hubs)
+        dh = nearest(dest, shipping_hubs)
+
+        if oh is None or dh is None:
+            return False
+
+        if not near_enough(origin, oh):
+            return False
+
+        if not near_enough(dest, dh):
+            return False
+
+        if d >= 300.0:
+            return False
+
         return True
 
+    return False
+
+
+def spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs):
+    if vehicle_type == VehicleType.CargoShip:
+        ship_info = build_ship_path(origin, origin, ocean_ports)
+        if ship_info is not None:
+            return ship_info["origin_port"]
+        p = nearest(origin, ocean_ports) if ocean_ports else None
+        return p if near_enough(origin, p) else None
+
+    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train, VehicleType.Drone):
+        h = nearest(origin, shipping_hubs) if shipping_hubs else None
+        return h if near_enough(origin, h) else None
+
+    if vehicle_type == VehicleType.Airplane:
+        a = nearest(origin, airports) if airports else None
+        return a if near_enough(origin, a) else None
+
+    return None
+
+
+def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, shipping_hubs):
+    if not can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shipping_hubs):
+        return None
+
+    cfg = get_cfg(vehicle_type)
+    load = min(n_boxes, cfg.capacity)
+    if load <= 0:
+        return None
+
+    route_path = [dest]
+    distance_km = km(origin, dest)
+    route_kind = "direct"
+    terrain_penalty = estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_hubs)
+
+    if vehicle_type == VehicleType.CargoShip:
+        ship_info = build_ship_path(origin, dest, ocean_ports)
+        if ship_info is None:
+            return None
+        route_path = ship_info["path"][1:]
+        distance_km = ship_info["path_km"]
+        route_kind = "port_to_port"
+        terrain_penalty = 0.0
+
+    elif vehicle_type == VehicleType.Airplane:
+        oa = nearest(origin, airports)
+        da = nearest(dest, airports)
+
+        if oa is None or da is None:
+            return None
+
+        route_path = []
+        if oa != da:
+            route_path.append(da)
+        else:
+            route_path.append(da)
+
+        distance_km = path_km([oa] + route_path)
+        route_kind = "airport_to_airport"
+        terrain_penalty = 0.0
+
+    elif vehicle_type == VehicleType.Drone:
+        distance_km = km(origin, dest)
+        route_kind = "local_land"
+        terrain_penalty = 0.0
+
+    if terrain_penalty == float("inf"):
+        return None
+
+    cost = cfg.base_cost + cfg.per_km_cost * distance_km + terrain_penalty
+
+    if vehicle_type == VehicleType.Drone:
+        cost *= 2.0
+
+    cost_per_box_km = cost / max(load * max(distance_km, 1.0), 1.0)
+
+    land_priority_bonus = 0.0
+    if vehicle_type == VehicleType.Train:
+        land_priority_bonus = -35.0
+    elif vehicle_type == VehicleType.SemiTruck:
+        land_priority_bonus = -15.0
+    elif vehicle_type == VehicleType.Drone:
+        land_priority_bonus = 40.0
+
+    if vehicle_type in (VehicleType.Train, VehicleType.SemiTruck) and distance_km < 1200:
+        cost_per_box_km *= 0.75
+
+    value = load * _BOX_VALUE
+    margin = value - cost
+
+    return {
+        "vehicle_type": vehicle_type,
+        "distance_km": distance_km,
+        "load": load,
+        "cost": cost,
+        "value": value,
+        "margin": margin,
+        "terrain_penalty": terrain_penalty,
+        "cost_per_box_km": cost_per_box_km,
+        "route_path": route_path,
+        "route_kind": route_kind,
+        "sort_bias": land_priority_bonus,
+    }
+
+
+def choose_best_vehicle(origin, dest, n_boxes, ocean_ports, airports, shipping_hubs, force=False):
+    candidates = []
+    direct_distance = km(origin, dest)
+
+    if direct_distance >= _LONG_ROUTE_KM:
+        vehicle_pool = [VehicleType.Airplane, VehicleType.Drone]
     else:
-        src_port = _nearest_same_region(origin, OCEAN_PORTS) or _nearest(origin, OCEAN_PORTS)
-        vtype = VehicleType.Train if n >= TRAIN_MIN_BOXES else VehicleType.SemiTruck
-        selected = box_ids[:vtype.value.capacity]
-        vid = _find_idle_ground(sim_state, vtype, origin)
-        if not vid:
-            vid = _spawn(sim_state, vtype, _nearest(origin, SHIPPING_HUBS))
-        if not vid:
-            return False
-        claimed.update(selected)
-        itineraries[vid] = {
-            "state": "TO_PICKUP", "pickup_loc": origin,
-            "box_ids": selected, "waypoints": _land_wps(origin, src_port) + [src_port],
-        }
-        return True
+        vehicle_pool = [
+            VehicleType.CargoShip,
+            VehicleType.Train,
+            VehicleType.SemiTruck,
+            VehicleType.Airplane,
+            VehicleType.Drone,
+        ]
+
+    for vt in vehicle_pool:
+        scored = route_score(vt, origin, dest, n_boxes, ocean_ports, airports, shipping_hubs)
+        if scored is None:
+            continue
+        if not force and scored["margin"] <= 0:
+            continue
+        candidates.append(scored)
+
+    if not candidates:
+        return None
+
+    candidates.sort(
+        key=lambda x: (
+            x["cost_per_box_km"] + (x["sort_bias"] / 1000.0),
+            x["cost"],
+            -x["load"],
+        )
+    )
+    return candidates[0]
 
 
-def _find_idle_ground(sim_state, vtype, pickup_loc):
-    """Return the nearest idle vehicle of the given type if reusing it is cheaper than spawning a new one."""
-    best_vid, best_cost = None, float("inf")
-    for vid, v in sim_state.get_vehicles().items():
-        if v["vehicle_type"] != vtype.name or v["destination"] is not None:
+def find_idle_vehicle(vehicle_type, vehicles, origin, ocean_ports, airports, shipping_hubs):
+    spawn = spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs)
+    if spawn is None:
+        return None
+
+    best_vid = None
+    best_dist = float("inf")
+
+    for vid, job in _vehicle_jobs.items():
+        if job["vehicle_type"] != vehicle_type.name:
             continue
-        itin = itineraries.get(vid)
-        if itin is not None and itin.get("waypoints"):
+        if job["state"] != "IDLE":
             continue
-        cost = haversine_distance_meters(v["location"], pickup_loc) / 1000.0 * vtype.value.per_km_cost
-        if cost < (vtype.value.base_cost * 2) and cost < best_cost:
-            best_cost, best_vid = cost, vid
+        if vid not in vehicles:
+            continue
+        if vehicles[vid]["destination"] is not None:
+            continue
+        if vehicles[vid]["cargo"]:
+            continue
+
+        d = km(vehicles[vid]["location"], spawn)
+        if d < best_dist:
+            best_dist = d
+            best_vid = vid
+
     return best_vid
 
 
-def _region(loc):
-    """Return the broad continental region for a (lat, lon) coordinate."""
-    lat, lon = loc
-    if lon < -30:              return "AMERICAS"
-    if lat > 0 and lon >= 100: return "EAST_ASIA"
-    if lat <= 0 and lon >= 100: return "OCEANIA"
-    return "EURASIA_AFRICA"
+def create_or_get_vehicle(sim_state, vehicle_type, origin, vehicles, ocean_ports, airports, shipping_hubs, force_new=False):
+    if not force_new:
+        vid = find_idle_vehicle(vehicle_type, vehicles, origin, ocean_ports, airports, shipping_hubs)
+        if vid is not None:
+            return vid
+
+    spawn = spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs)
+    if spawn is None:
+        return None
+
+    try:
+        vid = sim_state.create_vehicle(vehicle_type, spawn)
+    except ValueError:
+        return None
+
+    _vehicle_jobs[vid] = {
+        "vehicle_type": vehicle_type.name,
+        "state": "IDLE",
+        "origin": None,
+        "dest": None,
+        "box_ids": [],
+        "cluster_key": None,
+        "force_job": False,
+        "route_path": [],
+        "route_kind": "direct",
+    }
+    return vid
 
 
-def _nearest(loc, infra):
-    """Return the (lat, lon) of the closest item in an infrastructure list."""
-    best_d, best_c = float("inf"), None
-    for item in infra:
-        d = haversine_distance_meters(loc, (item["lat"], item["lon"]))
-        if d < best_d:
-            best_d, best_c = d, (item["lat"], item["lon"])
-    return best_c
+def refresh_jobs_with_missing_vehicles(vehicles):
+    for vid in list(_vehicle_jobs.keys()):
+        if vid not in vehicles:
+            _vehicle_jobs.pop(vid, None)
 
 
-def _nearest_same_region(loc, infra):
-    """Return the closest infra item in the same region as loc, or None."""
-    loc_region = _region(loc)
-    best_d, best_c = float("inf"), None
-    for item in infra:
-        coord = (item["lat"], item["lon"])
-        if _region(coord) != loc_region:
+def get_active_clusters():
+    active_clusters = set()
+    for job in _vehicle_jobs.values():
+        if job["state"] != "IDLE" and job["cluster_key"] is not None:
+            active_clusters.add(job["cluster_key"])
+    return active_clusters
+
+
+def dispatch(sim_state, boxes, vehicles, ocean_ports, airports, shipping_hubs):
+    active_clusters = get_active_clusters()
+    clusters = rebuild_clusters(boxes)
+    ranked = sorted(clusters.items(), key=lambda item: -len(item[1]))
+
+    for (origin, dest), bids in ranked:
+        key = (origin, dest)
+        if key in active_clusters:
             continue
-        d = haversine_distance_meters(loc, coord)
-        if d < best_d:
-            best_d, best_c = d, coord
-    return best_c
 
-
-def _near_any(loc, infra):
-    """Return True if loc is within INFRA_R metres of any item in the list."""
-    return any(haversine_distance_meters(loc, (i["lat"], i["lon"])) <= INFRA_R for i in infra)
-
-
-def _ocean_wps(src, dst):
-    """Return a Panama or Suez waypoint if needed to keep a ship in navigable water."""
-    sx, dx = src[1], dst[1]
-    if sx < -30 and -30 <= dx < 100:  return [PANAMA]
-    if -30 <= sx < 100 and dx < -30:  return [PANAMA]
-    if -30 <= sx < 100 and dx >= 100: return [SUEZ]
-    if sx >= 100 and -30 <= dx < 100: return [SUEZ]
-    return []
-
-
-def _land_wps(src, dst):
-    """Return waypoints to keep a ground vehicle on solid ground between src and dst."""
-    wps = []
-    src_r = _region(src)
-    dst_r = _region(dst)
-
-    if src_r == "AMERICAS" and dst_r == "AMERICAS":
-        def _south_fl(loc):
-            return loc[0] < 30.5 and loc[1] > -82.5
-
-        def _south_am(loc):
-            return loc[0] < 9.0
-
-        def _north_am(loc):
-            return loc[0] > 25.0
-
-        if _south_am(src) and _north_am(dst):
-            wps.extend([SAO_GW1, SAO_GW2])
-            if _south_fl(dst): wps.append(FLORIDA_GW)
-            return wps
-        if _north_am(src) and _south_am(dst):
-            if _south_fl(src): wps.append(FLORIDA_GW)
-            wps.extend([SAO_GW2, SAO_GW1])
-            return wps
-        if _south_fl(src) != _south_fl(dst):
-            wps.append(FLORIDA_GW)
-        return wps
-
-    if src_r == "EURASIA_AFRICA" and dst_r == "EURASIA_AFRICA":
-        def _s_africa(loc):
-            return loc[0] < -15.0 and 15.0 < loc[1] < 45.0
-
-        def _e_africa(loc):
-            return -5.0 < loc[0] < 15.0 and 30.0 < loc[1] < 50.0
-
-        def _mideast(loc):
-            return loc[0] > 10.0 and 45.0 < loc[1] < 85.0
-
-        if _s_africa(src) != _s_africa(dst):
-            wps.append(CENT_AFRICA)
-        if _e_africa(src) and _mideast(dst) or _mideast(src) and _e_africa(dst):
-            wps.append(EGYPT_GW)
-        return wps
-
-    if src_r == "EAST_ASIA" and dst_r == "EAST_ASIA":
-        def _se_asia(loc):
-            return loc[0] < 15.0 and loc[1] >= 100.0
-
-        def _japan(loc):
-            return loc[0] > 30.0 and loc[1] > 125.0
-
-        if _se_asia(src) and _japan(dst) or _japan(src) and _se_asia(dst):
-            wps.append(UPPER_CHINA)
-        return wps
-
-    if {src_r, dst_r} == {"EAST_ASIA", "EURASIA_AFRICA"}:
-        wps.append(EGYPT_GW)
-
-    return wps
-
-
-def _spawn(sim_state, vtype, preferred_loc):
-    """Try to spawn a vehicle at preferred_loc, falling back through the appropriate infra list."""
-    if vtype in (VehicleType.SemiTruck, VehicleType.Train):
-        fallback = [h for h in SHIPPING_HUBS if _region((h["lat"], h["lon"])) != "OCEANIA"]
-    elif vtype == VehicleType.CargoShip:
-        fallback = OCEAN_PORTS
-    else:
-        fallback = AIRPORTS
-
-    for loc in [preferred_loc] + [(i["lat"], i["lon"]) for i in fallback]:
-        try:
-            return sim_state.create_vehicle(vtype, loc)
-        except (ValueError, TypeError):
+        is_stuck = cluster_is_stuck(bids, sim_state.tick)
+        best = choose_best_vehicle(
+            origin,
+            dest,
+            len(bids),
+            ocean_ports,
+            airports,
+            shipping_hubs,
+            force=is_stuck,
+        )
+        if best is None:
             continue
-    return None
+
+        vid = create_or_get_vehicle(
+            sim_state,
+            best["vehicle_type"],
+            origin,
+            vehicles,
+            ocean_ports,
+            airports,
+            shipping_hubs,
+            force_new=is_stuck,
+        )
+        if vid is None:
+            continue
+
+        cfg = get_cfg(best["vehicle_type"])
+        chosen_boxes = bids[:cfg.capacity]
+
+        _vehicle_jobs[vid] = {
+            "vehicle_type": best["vehicle_type"].name,
+            "state": "LOADING",
+            "origin": origin,
+            "dest": dest,
+            "box_ids": chosen_boxes,
+            "cluster_key": key,
+            "force_job": is_stuck,
+            "route_path": list(best["route_path"]),
+            "route_kind": best["route_kind"],
+        }
+
+        reason = "forced-stuck" if is_stuck else "normal"
+        log(
+            f"[dispatch] {reason} {vid} {best['vehicle_type'].name} "
+            f"{origin} -> {dest} boxes={len(chosen_boxes)} "
+            f"cost={best['cost']:.1f} terrain={best['terrain_penalty']:.1f} "
+            f"cpbk={best['cost_per_box_km']:.6f} route={best['route_kind']}"
+        )
+
+
+def execute(sim_state, boxes, vehicles):
+    for vid, job in list(_vehicle_jobs.items()):
+        if vid not in vehicles:
+            continue
+
+        vehicle = vehicles[vid]
+        loc = vehicle["location"]
+
+        if job["state"] == "IDLE":
+            continue
+
+        if job["state"] == "LOADING":
+            if vehicle["destination"] is not None:
+                continue
+
+            cap = get_cfg(VehicleType[job["vehicle_type"]]).capacity
+            cap_left = cap - len(vehicle["cargo"])
+            if cap_left <= 0:
+                job["state"] = "EN_ROUTE"
+                continue
+
+            loadable = []
+            remaining = []
+
+            for bid in job["box_ids"]:
+                if bid not in boxes:
+                    continue
+
+                box = boxes[bid]
+
+                if box["delivered"]:
+                    continue
+
+                if box["destination"] != job["dest"]:
+                    remaining.append(bid)
+                    continue
+
+                if box["vehicle_id"] is not None:
+                    remaining.append(bid)
+                    continue
+
+                if haversine_distance_meters(loc, box["location"]) > _PROXIMITY_M:
+                    remaining.append(bid)
+                    continue
+
+                if len(loadable) < cap_left:
+                    loadable.append(bid)
+                else:
+                    remaining.append(bid)
+
+            if loadable:
+                try:
+                    sim_state.load_vehicle(vid, loadable)
+                    job["box_ids"] = remaining
+                    log(f"[load] {vid} loaded={len(loadable)}")
+                except ValueError as e:
+                    log(f"[load-failed] {vid}: {e}")
+                    continue
+
+            current_vehicle = sim_state.get_vehicles().get(vid)
+            if current_vehicle and current_vehicle["cargo"]:
+                job["state"] = "EN_ROUTE"
+
+        elif job["state"] == "EN_ROUTE":
+            if vehicle["destination"] is not None:
+                continue
+
+            while job["route_path"] and haversine_distance_meters(loc, job["route_path"][0]) <= _ARRIVAL_M:
+                job["route_path"].pop(0)
+
+            if not job["route_path"]:
+                job["state"] = "UNLOADING"
+                continue
+
+            try:
+                sim_state.move_vehicle(vid, job["route_path"][0])
+                log(f"[move] {vid} -> {job['route_path'][0]}")
+            except (ValueError, KeyError) as e:
+                log(f"[move-failed] {vid}: {e}")
+
+        elif job["state"] == "UNLOADING":
+            if vehicle["destination"] is not None:
+                continue
+
+            if vehicle["cargo"]:
+                try:
+                    cargo_ids = list(vehicle["cargo"])
+                    sim_state.unload_vehicle(vid, cargo_ids)
+                    log(f"[unload] {vid} unloaded={len(cargo_ids)}")
+                except ValueError as e:
+                    log(f"[unload-failed] {vid}: {e}")
+                    continue
+
+            current_vehicle = sim_state.get_vehicles().get(vid)
+            if current_vehicle is not None and not current_vehicle["cargo"]:
+                log(f"[done] {vid} finished {job['cluster_key']}")
+                _vehicle_jobs[vid] = {
+                    "vehicle_type": job["vehicle_type"],
+                    "state": "IDLE",
+                    "origin": None,
+                    "dest": None,
+                    "box_ids": [],
+                    "cluster_key": None,
+                    "force_job": False,
+                    "route_path": [],
+                    "route_kind": "direct",
+                }
+
+
+def step(sim_state):
+    try:
+        ocean_ports = list(sim_state.get_ocean_ports())
+    except Exception:
+        ocean_ports = []
+
+    try:
+        airports = list(sim_state.get_airports())
+    except Exception:
+        airports = []
+
+    try:
+        shipping_hubs = list(sim_state.get_shipping_hubs())
+    except Exception:
+        shipping_hubs = []
+
+    boxes = sim_state.get_boxes()
+    vehicles = sim_state.get_vehicles()
+
+    refresh_jobs_with_missing_vehicles(vehicles)
+    update_box_memory(boxes, sim_state.tick)
+
+    dispatch(sim_state, boxes, vehicles, ocean_ports, airports, shipping_hubs)
+
+    vehicles = sim_state.get_vehicles()
+    boxes = sim_state.get_boxes()
+
+    execute(sim_state, boxes, vehicles)
+
+    if sim_state.tick % 10 == 0:
+        waiting = 0
+        stuck = 0
+        for b in boxes.values():
+            if b["delivered"]:
+                continue
+            if b["vehicle_id"] is None:
+                waiting += 1
+                mem = _box_memory.get(b["id"])
+                if mem is not None and sim_state.tick - mem["last_moved_tick"] >= _STUCK_TICKS:
+                    stuck += 1
+
+        active = sum(1 for j in _vehicle_jobs.values() if j["state"] != "IDLE")
+        log(
+            f"[tick {sim_state.tick}] waiting={waiting} stuck={stuck} "
+            f"vehicles={len(vehicles)} active={active} "
+            f"cost={sim_state.total_cost:.1f} terrain={sim_state.terrain_penalty:.1f}"
+        )
