@@ -7,7 +7,7 @@ _INFRA_M = 5000.0
 _ARRIVAL_M = 20000.0
 _BOX_VALUE = 1000.0
 _STUCK_TICKS = 50
-_LONG_ROUTE_KM = 5000.0
+_LONG_ROUTE_KM = 4000.0
 
 _vehicle_jobs = {}
 _box_memory = {}
@@ -230,27 +230,71 @@ def estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_h
 
     return float("inf")
 
-
 def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shipping_hubs):
+    d = km(origin, dest)
+
     if vehicle_type == VehicleType.CargoShip:
-        return build_ship_path(origin, dest, ocean_ports) is not None
+        ship_info = build_ship_path(origin, dest, ocean_ports)
+        return ship_info is not None
 
     if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
         if not shipping_hubs:
             return False
+
         oh = nearest(origin, shipping_hubs)
         dh = nearest(dest, shipping_hubs)
-        return near_enough(origin, oh) and near_enough(dest, dh)
 
-    if vehicle_type in (VehicleType.Airplane, VehicleType.Drone):
+        if oh is None or dh is None:
+            return False
+
+        if not near_enough(origin, oh):
+            return False
+
+        if not near_enough(dest, dh):
+            return False
+
+        if d >= _LONG_ROUTE_KM:
+            return False
+
+        origin_port = nearest(origin, ocean_ports) if ocean_ports else None
+        dest_port = nearest(dest, ocean_ports) if ocean_ports else None
+
+        origin_near_port = near_enough(origin, origin_port) if origin_port is not None else False
+        dest_near_port = near_enough(dest, dest_port) if dest_port is not None else False
+
+        if origin_near_port and dest_near_port and d >= 1200:
+            return False
+
+        return True
+
+    if vehicle_type == VehicleType.Airplane:
         if not airports:
             return False
+
         oa = nearest(origin, airports)
         da = nearest(dest, airports)
+
+        if oa is None or da is None:
+            return False
+
         return near_enough(origin, oa) and near_enough(dest, da)
 
-    return False
+    if vehicle_type == VehicleType.Drone:
+        if not airports:
+            return False
 
+        oa = nearest(origin, airports)
+        da = nearest(dest, airports)
+
+        if oa is None or da is None:
+            return False
+
+        if not (near_enough(origin, oa) and near_enough(dest, da)):
+            return False
+
+        return d < _LONG_ROUTE_KM
+
+    return False
 
 def spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs):
     if vehicle_type == VehicleType.CargoShip:
@@ -311,6 +355,7 @@ def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, ship
         "route_path": route_path,
         "route_kind": "port_to_port" if vehicle_type == VehicleType.CargoShip else "direct",
     }
+
 
 
 
