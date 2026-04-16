@@ -330,13 +330,18 @@ def _land_wps(src, dst):
         def _north_am(loc):
             return loc[0] > 25.0
 
+        # Hardcoded intercept: any North American or Florida-area origin heading to
+        # South America must go through SAO_GW1 (Guatemala) and SAO_GW2 (New Mexico)
+        # to follow the Central American land bridge. FLORIDA_GW is prepended if the
+        # truck is starting in the South Florida / Gulf coast zone.
+        if _north_am(src) and _south_am(dst):
+            if _south_fl(src):
+                wps.append(FLORIDA_GW)
+            wps.extend([SAO_GW2, SAO_GW1])
+            return wps
         if _south_am(src) and _north_am(dst):
             wps.extend([SAO_GW1, SAO_GW2])
             if _south_fl(dst): wps.append(FLORIDA_GW)
-            return wps
-        if _north_am(src) and _south_am(dst):
-            if _south_fl(src): wps.append(FLORIDA_GW)
-            wps.extend([SAO_GW2, SAO_GW1])
             return wps
         if _south_fl(src) != _south_fl(dst):
             wps.append(FLORIDA_GW)
