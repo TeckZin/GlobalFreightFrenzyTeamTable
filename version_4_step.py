@@ -11,45 +11,112 @@ Strategy:
 from simulator import VehicleType, haversine_distance_meters
 import heapq
 
-_PROXIMITY_M = 50.0
-_FACILITY_RADIUS_M = 5000.0
+_PROXIMITY_M = 50.0              # delivery / load / unload threshold
+_WAYPOINT_ARRIVAL_M = 20000.0    # "close enough" for routing waypoints (20 km)
+_FACILITY_RADIUS_M = 5000.0      # sim's hard rule for load/unload at airport/port
+_TRUCK_HOP_MAX_KM = 800.0        # how far we're willing to truck to reach a port/airport
 DEBUG = True
+
+# Rough heuristic: if a straight-line land leg crosses >X km, assume it crosses
+# ocean and should use a ship. If an ocean leg is <Y km, it's probably a short
+# coastal hop and a truck is fine. Tune to your scenario.
+_LAND_MAX_KM  = 2500.0   # beyond this, DEFINITELY crossing water — reject land
+_OCEAN_MIN_KM = 500.0    # below this, not worth spinning up a ship
 
 
 # ── Ocean routing waypoints ──────────────────────────────────────────────
 # Chokepoints + open-ocean pivots so ships don't cut through land.
 OCEAN_WAYPOINTS = {
+    # Chokepoints
     "panama":       (9.08, -79.68),
     "suez":         (30.0, 32.55),
     "gibraltar":    (35.95, -5.6),
     "malacca":      (2.5, 101.5),
     "good_hope":    (-34.4, 18.5),
     "horn":         (-55.98, -67.27),
-    "mid_pacific":  (0.0, -150.0),
-    "mid_atlantic": (0.0, -30.0),
-    "mid_indian":   (0.0, 75.0),
-    "n_atlantic":   (40.0, -40.0),
-    "n_pacific":    (40.0, -170.0),
+    "bab_el":       (12.58, 43.33),    # Bab-el-Mandeb, Red Sea ↔ Indian Ocean
+    # Open-ocean pivots — these are pure-water nodes
+    "n_atlantic_w": (35.0, -60.0),     # off US east coast
+    "n_atlantic_e": (45.0, -20.0),     # mid north atlantic
+    "s_atlantic":   (-20.0, -20.0),    # mid south atlantic
+    "n_pacific_w": (35.0, 150.0),      # off Japan
+    "n_pacific_e": (35.0, -150.0),     # off California
+    "s_pacific":   (-20.0, -140.0),    # mid south pacific
+    "n_indian":    (10.0, 70.0),       # arabian sea
+    "s_indian":    (-20.0, 80.0),      # mid indian
+    "red_sea":     (20.0, 38.0),       # between suez and bab_el
+    "med_east":    (34.0, 25.0),       # eastern mediterranean
+    "caribbean":   (15.0, -75.0),      # between panama and atlantic
+    "english_ch":  (50.0, -2.0),       # english channel
+    "north_sea":   (56.0, 3.0),
+    "south_china": (15.0, 115.0),      # between malacca and japan
+    "coral_sea":   (-15.0, 155.0),     # off australia east
 }
 
-# Edges = pairs of waypoints with clear water between them.
+# Only connect waypoints that have a genuine water-only path between them.
+# No "panama ↔ mid_indian" because that straight line crosses South America.
 OCEAN_EDGES = [
-    ("panama", "mid_pacific"),
-    ("panama", "mid_atlantic"),
-    ("panama", "n_pacific"),
-    ("suez", "gibraltar"),
-    ("suez", "mid_indian"),
-    ("gibraltar", "mid_atlantic"),
-    ("gibraltar", "n_atlantic"),
-    ("malacca", "mid_indian"),
-    ("malacca", "mid_pacific"),
-    ("good_hope", "mid_atlantic"),
-    ("good_hope", "mid_indian"),
-    ("horn", "mid_pacific"),
-    ("horn", "mid_atlantic"),
-    ("mid_atlantic", "n_atlantic"),
-    ("mid_pacific", "n_pacific"),
+    # North Atlantic ring
+    ("panama", "caribbean"),
+    ("caribbean", "n_atlantic_w"),
+    ("n_atlantic_w", "n_atlantic_e"),
+    ("n_atlantic_e", "english_ch"),
+    ("n_atlantic_e", "gibraltar"),
+    ("english_ch", "north_sea"),
+    # Mediterranean
+    ("gibraltar", "med_east"),
+    ("med_east", "suez"),
+    # Red Sea / Indian Ocean
+    ("suez", "red_sea"),
+    ("red_sea", "bab_el"),
+    ("bab_el", "n_indian"),
+    ("n_indian", "s_indian"),
+    ("n_indian", "malacca"),
+    # South Atlantic / Cape route
+    ("n_atlantic_e", "s_atlantic"),
+    ("n_atlantic_w", "s_atlantic"),
+    ("s_atlantic", "good_hope"),
+    ("good_hope", "s_indian"),
+    # Pacific
+    ("panama", "n_pacific_e"),
+    ("n_pacific_e", "n_pacific_w"),
+    ("n_pacific_w", "south_china"),
+    ("south_china", "malacca"),
+    ("s_pacific", "n_pacific_e"),
+    ("s_pacific", "n_pacific_w"),
+    ("s_pacific", "coral_sea"),
+    ("coral_sea", "s_indian"),
+    # Cape Horn route (backup)
+    ("horn", "s_atlantic"),
+    ("horn", "s_pacific"),
 ]
+
+# Port → allowed nearby waypoints. A port connects only to waypoints in its
+# own ocean basin; NO direct port↔port across oceans, NO jumping to a
+# chokepoint on the other side of the world.
+# Key is approximate (lat, lon); we match ports to regions by distance.
+# Each region lists the 1-3 waypoints that ships can reach without crossing land.
+OCEAN_REGIONS = [
+    # name,            center,          waypoints a port here connects to
+    ("n_america_east", (35.0, -75.0),   ["n_atlantic_w", "caribbean", "panama"]),
+    ("n_america_west", (35.0, -125.0),  ["n_pacific_e", "panama"]),
+    ("europe_atlantic",(50.0, -5.0),    ["english_ch", "n_atlantic_e", "gibraltar"]),
+    ("mediterranean",  (40.0, 15.0),    ["gibraltar", "med_east", "suez"]),
+    ("middle_east",    (25.0, 55.0),    ["bab_el", "n_indian"]),
+    ("s_asia",         (15.0, 75.0),    ["n_indian", "malacca"]),
+    ("se_asia",        (5.0, 110.0),    ["malacca", "south_china"]),
+    ("e_asia",         (35.0, 135.0),   ["south_china", "n_pacific_w"]),
+    ("australia",      (-30.0, 140.0),  ["coral_sea", "s_indian"]),
+    ("s_america_east", (-20.0, -40.0),  ["s_atlantic", "caribbean"]),
+    ("s_america_west", (-20.0, -75.0),  ["s_pacific", "panama", "horn"]),
+    ("africa_west",    (0.0, 0.0),      ["s_atlantic", "gibraltar"]),
+    ("africa_east",    (-10.0, 40.0),   ["s_indian", "bab_el"]),
+]
+
+
+def _port_region(port_coord):
+    """Find the closest region for a port by great-circle distance to its center."""
+    return min(OCEAN_REGIONS, key=lambda r: km(port_coord, r[1]))
 
 
 # ── Vehicle lookup helpers ───────────────────────────────────────────────
@@ -91,41 +158,69 @@ def _cluster_boxes(boxes):
 
 
 def _leg_feasible(mode, origin, dest, airports, ocean_ports):
-    """Can a vehicle of this mode legally fly/drive/sail this leg?"""
+    """Can a vehicle of this mode legally + sensibly serve this leg?
+
+    Air/ocean only require that SOME airport/port exists within truck range of
+    both endpoints — we'll use a truck hop to bridge origin→facility and
+    facility→dest. They do NOT need to be within the sim's 5km load radius of
+    the hub itself.
+    """
+    leg_km = km(origin, dest)
+
     if mode == "land":
-        return True  # land vehicles can move anywhere; terrain penalty handles water
+        if leg_km > _LAND_MAX_KM:
+            return False
+        return True
+
     if mode == "air":
-        # Need airport at both ends for load/unload
-        near_origin = any(km(origin, a) * 1000 <= _FACILITY_RADIUS_M for a in airports)
-        near_dest   = any(km(dest,   a) * 1000 <= _FACILITY_RADIUS_M for a in airports)
+        if not airports:
+            return False
+        near_origin = any(km(origin, a) <= _TRUCK_HOP_MAX_KM for a in airports)
+        near_dest   = any(km(dest,   a) <= _TRUCK_HOP_MAX_KM for a in airports)
         return near_origin and near_dest
+
     if mode == "ocean":
         if not ocean_ports:
             return False
-        near_origin = any(km(origin, p) * 1000 <= _FACILITY_RADIUS_M for p in ocean_ports)
-        near_dest   = any(km(dest,   p) * 1000 <= _FACILITY_RADIUS_M for p in ocean_ports)
+        if leg_km < _OCEAN_MIN_KM:
+            return False
+        near_origin = any(km(origin, p) <= _TRUCK_HOP_MAX_KM for p in ocean_ports)
+        near_dest   = any(km(dest,   p) <= _TRUCK_HOP_MAX_KM for p in ocean_ports)
         return near_origin and near_dest
+
     return False
 
 
 def _ocean_route(origin_port, dest_port):
-    """Dijkstra through OCEAN_WAYPOINTS. Returns [origin, waypoint, ..., dest]."""
-    # Build a combined graph: ports + waypoints, fully connected for ports↔waypoints,
-    # waypoint↔waypoint only along OCEAN_EDGES.
+    """Dijkstra through OCEAN_WAYPOINTS using region-based port connectivity.
+
+    Ports connect ONLY to waypoints in their own ocean region — never directly
+    to the destination port (unless same region) and never to chokepoints on
+    the wrong side of the world. This forces realistic routing through canals.
+    """
+    origin_region = _port_region(origin_port)
+    dest_region   = _port_region(dest_port)
+
     nodes = {"__origin__": origin_port, "__dest__": dest_port}
     nodes.update(OCEAN_WAYPOINTS)
-
     adj = {n: [] for n in nodes}
-    # Ports connect to all waypoints (they can reach open water from any port).
-    for wp in OCEAN_WAYPOINTS:
+
+    # Origin port connects only to waypoints in its region.
+    for wp in origin_region[2]:
         adj["__origin__"].append(wp)
         adj[wp].append("__origin__")
+
+    # Dest port connects only to waypoints in its region.
+    for wp in dest_region[2]:
         adj["__dest__"].append(wp)
         adj[wp].append("__dest__")
-    # Direct port-to-port for short hops.
-    adj["__origin__"].append("__dest__")
-    adj["__dest__"].append("__origin__")
-    # Waypoint edges.
+
+    # Same-region shortcut: allow direct port-to-port only if same region.
+    if origin_region[0] == dest_region[0]:
+        adj["__origin__"].append("__dest__")
+        adj["__dest__"].append("__origin__")
+
+    # Waypoint-to-waypoint edges (pre-vetted water-only).
     for a, b in OCEAN_EDGES:
         adj[a].append(b)
         adj[b].append(a)
@@ -149,7 +244,10 @@ def _ocean_route(origin_port, dest_port):
                 prev[v] = u
                 heapq.heappush(pq, (nd, v))
 
-    # Reconstruct path
+    if dist["__dest__"] == float("inf"):
+        # No water path found — return None so caller rejects ocean mode.
+        return None
+
     path = []
     cur = "__dest__"
     while cur is not None:
@@ -192,22 +290,20 @@ def _plan_cluster(origin, dest, n_boxes, airports, ocean_ports):
         if mode == "ocean":
             origin_port = _nearest(origin, ocean_ports)
             dest_port   = _nearest(dest,   ocean_ports)
-            # Ship route: origin_port → waypoints → dest_port
             ship_path = _ocean_route(origin_port, dest_port)
-            # Distance the ship itself travels
+            if ship_path is None:
+                continue  # no water path exists, skip this vehicle type
             ship_km = sum(km(ship_path[i], ship_path[i + 1])
                           for i in range(len(ship_path) - 1))
-            # Still need truck legs: origin → origin_port and dest_port → dest
-            # (We'll model this as a multi-leg plan; cost estimate includes trucks.)
             truck_cfg = VehicleType.SemiTruck.value
             truck_km  = km(origin, origin_port) + km(dest_port, dest)
             ship_cost = (cfg.base_cost * n_vehicles
                          + cfg.per_km_cost * ship_km * n_vehicles
-                         + n_boxes * 2)  # load + unload at port
+                         + n_boxes * 2)
             truck_cost = (truck_cfg.base_cost * 2
                           + truck_cfg.per_km_cost * truck_km
                           + n_boxes * 2)
-            total_cost = ship_cost + truck_cost + n_boxes  # initial load
+            total_cost = ship_cost + truck_cost + n_boxes
             route = {
                 "mode": "ocean_multimodal",
                 "ship_path": ship_path,
@@ -234,10 +330,13 @@ def _plan_cluster(origin, dest, n_boxes, airports, ocean_ports):
                 "dest_ap": dest_ap,
                 "n_vehicles": n_vehicles,
             }
-        else:  # land — direct
+        else:  # land — direct, and ONLY if leg is short enough
+            # _leg_feasible already rejects >_LAND_MAX_KM, but add a suspicion
+            # factor: any land leg over 1500 km is likely crossing water. If
+            # ships or planes are available, prefer them even at higher cost.
             total_cost = (cfg.base_cost * n_vehicles
                           + cfg.per_km_cost * direct_km * n_vehicles
-                          + n_boxes)  # load only, unload free-ish
+                          + n_boxes)
             route = {
                 "mode": "land_direct",
                 "n_vehicles": n_vehicles,
@@ -250,6 +349,8 @@ def _plan_cluster(origin, dest, n_boxes, airports, ocean_ports):
 
     candidates.sort(key=lambda c: c[0])
     cost, vehicle_name, route = candidates[0]
+    log(f"  plan {origin}->{dest}: picked {vehicle_name} ({route['mode']}) "
+        f"est ${cost:.0f} for {n_boxes} boxes over {direct_km:.0f} km")
     return {
         "vehicle_type": vehicle_name,
         "route": route,
@@ -264,15 +365,29 @@ def _plan_cluster(origin, dest, n_boxes, airports, ocean_ports):
 def _build_plan(sim_state):
     """Cluster all boxes and produce a prioritized list of delivery plans."""
     boxes = sim_state.get_boxes()
-    airports = list(sim_state.get_airports())
-    ocean_ports = list(sim_state.get_ocean_ports())
+    try:
+        airports = list(sim_state.get_airports()) or None
+    except Exception:
+        airports = None
+    try:
+        ocean_ports = list(sim_state.get_ocean_ports()) or None
+    except Exception:
+        ocean_ports = None
+
+    log(f"  airports available: {len(airports) if airports else 0}")
+    log(f"  ocean ports available: {len(ocean_ports) if ocean_ports else 0}")
+    if airports:
+        log(f"    airport coords: {airports[:5]}")
+    if ocean_ports:
+        log(f"    ocean port coords: {ocean_ports[:5]}")
 
     clusters = _cluster_boxes(boxes)
     plans = []
     for (origin, dest), box_ids in clusters.items():
         plan = _plan_cluster(origin, dest, len(box_ids), airports, ocean_ports)
         if plan is None:
-            log(f"  skip cluster {origin}->{dest}: no feasible vehicle")
+            log(f"  skip cluster {origin}->{dest}: no feasible vehicle "
+                f"(leg {km(origin, dest):.0f} km)")
             continue
         plan["box_ids"] = box_ids
         plans.append(plan)
@@ -412,7 +527,14 @@ def step(sim_state):
 
         # 3. Advance along the registered route.
         route = _vehicle_routes.get(vid, [])
-        # Drop waypoints we've already reached.
+        # Drop waypoints we're close enough to. Use a generous threshold for
+        # intermediate waypoints (ships/planes overshoot 50m in a single tick),
+        # but the final waypoint in the list is the real destination — keep
+        # that one precise so cargo can actually unload.
+        while len(route) > 1 and haversine_distance_meters(loc, route[0]) <= _WAYPOINT_ARRIVAL_M:
+            log(f"  {vid} passed waypoint {route[0]}, {len(route)-1} legs left")
+            route.pop(0)
+        # Final leg: use tight threshold so we can unload at destination.
         while route and haversine_distance_meters(loc, route[0]) <= _PROXIMITY_M:
             route.pop(0)
 
@@ -433,3 +555,4 @@ def step(sim_state):
 def vehicles_type(sim_state, vid):
     """Helper: get vehicle_type string for a given vid."""
     return sim_state.get_vehicles()[vid]["vehicle_type"]
+
