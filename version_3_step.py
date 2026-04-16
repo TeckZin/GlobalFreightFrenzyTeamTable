@@ -1,4 +1,3 @@
-
 from simulator import VehicleType, haversine_distance_meters
 
 AIRPORTS = [
@@ -769,7 +768,6 @@ def step(sim_state):
         log("=== INITIAL HUB SNAPSHOT ===")
         for location, hub in hubs.items():
             log(location, hub)
-=======
 
 AIRPORTS = [
     {'id': 'los_angeles_international_airport',         'lat':  33.9425, 'lon': -118.4081},
@@ -1161,4 +1159,3 @@ def _spawn(sim_state, vtype, preferred_loc):
         except (ValueError, TypeError):
             continue
     return None
->>>>>>> 028c5ea41f1b2d0b55e092c54f28d7f926970e14

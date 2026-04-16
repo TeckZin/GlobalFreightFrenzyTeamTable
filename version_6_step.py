@@ -230,6 +230,7 @@ def estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_h
 
     return float("inf")
 
+
 def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shipping_hubs):
     d = km(origin, dest)
 
@@ -280,21 +281,28 @@ def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shippin
         return near_enough(origin, oa) and near_enough(dest, da)
 
     if vehicle_type == VehicleType.Drone:
-        if not airports:
+        if not shipping_hubs:
             return False
 
-        oa = nearest(origin, airports)
-        da = nearest(dest, airports)
+        oh = nearest(origin, shipping_hubs)
+        dh = nearest(dest, shipping_hubs)
 
-        if oa is None or da is None:
+        if oh is None or dh is None:
             return False
 
-        if not (near_enough(origin, oa) and near_enough(dest, da)):
+        if not near_enough(origin, oh):
             return False
 
-        return d < _LONG_ROUTE_KM
+        if not near_enough(dest, dh):
+            return False
+
+        if d >= 300.0:
+            return False
+
+        return True
 
     return False
+
 
 def spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs):
     if vehicle_type == VehicleType.CargoShip:
@@ -304,11 +312,11 @@ def spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs):
         p = nearest(origin, ocean_ports) if ocean_ports else None
         return p if near_enough(origin, p) else None
 
-    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
+    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train, VehicleType.Drone):
         h = nearest(origin, shipping_hubs) if shipping_hubs else None
         return h if near_enough(origin, h) else None
 
-    if vehicle_type in (VehicleType.Airplane, VehicleType.Drone):
+    if vehicle_type == VehicleType.Airplane:
         a = nearest(origin, airports) if airports else None
         return a if near_enough(origin, a) else None
 
@@ -326,6 +334,8 @@ def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, ship
 
     route_path = [dest]
     distance_km = km(origin, dest)
+    route_kind = "direct"
+    terrain_penalty = estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_hubs)
 
     if vehicle_type == VehicleType.CargoShip:
         ship_info = build_ship_path(origin, dest, ocean_ports)
@@ -333,15 +343,54 @@ def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, ship
             return None
         route_path = ship_info["path"][1:]
         distance_km = ship_info["path_km"]
+        route_kind = "port_to_port"
+        terrain_penalty = 0.0
 
-    terrain_penalty = estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_hubs)
+    elif vehicle_type == VehicleType.Airplane:
+        oa = nearest(origin, airports)
+        da = nearest(dest, airports)
+
+        if oa is None or da is None:
+            return None
+
+        route_path = []
+        if oa != da:
+            route_path.append(da)
+        else:
+            route_path.append(da)
+
+        distance_km = path_km([oa] + route_path)
+        route_kind = "airport_to_airport"
+        terrain_penalty = 0.0
+
+    elif vehicle_type == VehicleType.Drone:
+        distance_km = km(origin, dest)
+        route_kind = "local_land"
+        terrain_penalty = 0.0
+
     if terrain_penalty == float("inf"):
         return None
 
     cost = cfg.base_cost + cfg.per_km_cost * distance_km + terrain_penalty
+
+    if vehicle_type == VehicleType.Drone:
+        cost *= 2.0
+
+    cost_per_box_km = cost / max(load * max(distance_km, 1.0), 1.0)
+
+    land_priority_bonus = 0.0
+    if vehicle_type == VehicleType.Train:
+        land_priority_bonus = -35.0
+    elif vehicle_type == VehicleType.SemiTruck:
+        land_priority_bonus = -15.0
+    elif vehicle_type == VehicleType.Drone:
+        land_priority_bonus = 40.0
+
+    if vehicle_type in (VehicleType.Train, VehicleType.SemiTruck) and distance_km < 1200:
+        cost_per_box_km *= 0.75
+
     value = load * _BOX_VALUE
     margin = value - cost
-    cost_per_box_km = cfg.per_km_cost / load
 
     return {
         "vehicle_type": vehicle_type,
@@ -353,10 +402,9 @@ def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, ship
         "terrain_penalty": terrain_penalty,
         "cost_per_box_km": cost_per_box_km,
         "route_path": route_path,
-        "route_kind": "port_to_port" if vehicle_type == VehicleType.CargoShip else "direct",
+        "route_kind": route_kind,
+        "sort_bias": land_priority_bonus,
     }
-
-
 
 
 def choose_best_vehicle(origin, dest, n_boxes, ocean_ports, airports, shipping_hubs, force=False):
@@ -387,12 +435,13 @@ def choose_best_vehicle(origin, dest, n_boxes, ocean_ports, airports, shipping_h
 
     candidates.sort(
         key=lambda x: (
+            x["cost_per_box_km"] + (x["sort_bias"] / 1000.0),
             x["cost"],
-            x["cost_per_box_km"],
             -x["load"],
         )
     )
     return candidates[0]
+
 
 def find_idle_vehicle(vehicle_type, vehicles, origin, ocean_ports, airports, shipping_hubs):
     spawn = spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs)
