@@ -8,6 +8,9 @@ _ARRIVAL_M = 20000.0
 _BOX_VALUE = 1000.0
 _STUCK_TICKS = 50
 _LONG_ROUTE_KM = 4000.0
+_DRONE_MAX_KM = 120.0
+_TRAIN_MIN_KM = 350.0
+_TRAIN_MIN_LOAD = 80
 
 _vehicle_jobs = {}
 _box_memory = {}
@@ -61,14 +64,6 @@ def get_cfg(vehicle_type):
     return vehicle_type.value
 
 
-def vehicle_mode(vehicle_type):
-    if vehicle_type == VehicleType.CargoShip:
-        return "ocean"
-    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
-        return "land"
-    return "air"
-
-
 def rebuild_clusters(boxes):
     clusters = {}
     for box in boxes.values():
@@ -91,10 +86,7 @@ def update_box_memory(boxes, tick):
             _box_memory.pop(bid, None)
             continue
 
-        signature = (
-            box["location"],
-            box["vehicle_id"],
-        )
+        signature = (box["location"], box["vehicle_id"])
 
         if bid not in _box_memory:
             _box_memory[bid] = {
@@ -203,6 +195,7 @@ def estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_h
     if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
         if not shipping_hubs:
             return float("inf")
+
         oh = nearest(origin, shipping_hubs)
         dh = nearest(dest, shipping_hubs)
         if oh is None or dh is None:
@@ -230,6 +223,7 @@ def estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_h
 
     return float("inf")
 
+
 def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shipping_hubs):
     d = km(origin, dest)
 
@@ -237,7 +231,7 @@ def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shippin
         ship_info = build_ship_path(origin, dest, ocean_ports)
         return ship_info is not None
 
-    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
+    if vehicle_type == VehicleType.SemiTruck:
         if not shipping_hubs:
             return False
 
@@ -246,13 +240,37 @@ def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shippin
 
         if oh is None or dh is None:
             return False
-
         if not near_enough(origin, oh):
             return False
-
         if not near_enough(dest, dh):
             return False
+        if d >= _LONG_ROUTE_KM:
+            return False
 
+        origin_port = nearest(origin, ocean_ports) if ocean_ports else None
+        dest_port = nearest(dest, ocean_ports) if ocean_ports else None
+
+        origin_near_port = near_enough(origin, origin_port) if origin_port is not None else False
+        dest_near_port = near_enough(dest, dest_port) if dest_port is not None else False
+
+        if origin_near_port and dest_near_port and d >= 1200:
+            return False
+
+        return True
+
+    if vehicle_type == VehicleType.Train:
+        if not shipping_hubs:
+            return False
+
+        oh = nearest(origin, shipping_hubs)
+        dh = nearest(dest, shipping_hubs)
+
+        if oh is None or dh is None:
+            return False
+        if not near_enough(origin, oh):
+            return False
+        if not near_enough(dest, dh):
+            return False
         if d >= _LONG_ROUTE_KM:
             return False
 
@@ -277,24 +295,31 @@ def can_service_route(vehicle_type, origin, dest, ocean_ports, airports, shippin
         if oa is None or da is None:
             return False
 
-        return near_enough(origin, oa) and near_enough(dest, da)
+        if not near_enough(origin, oa):
+            return False
+
+        return True
 
     if vehicle_type == VehicleType.Drone:
-        if not airports:
+        if not shipping_hubs:
             return False
 
-        oa = nearest(origin, airports)
-        da = nearest(dest, airports)
+        oh = nearest(origin, shipping_hubs)
+        dh = nearest(dest, shipping_hubs)
 
-        if oa is None or da is None:
+        if oh is None or dh is None:
+            return False
+        if not near_enough(origin, oh):
+            return False
+        if not near_enough(dest, dh):
+            return False
+        if d > _DRONE_MAX_KM:
             return False
 
-        if not (near_enough(origin, oa) and near_enough(dest, da)):
-            return False
-
-        return d < _LONG_ROUTE_KM
+        return True
 
     return False
+
 
 def spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs):
     if vehicle_type == VehicleType.CargoShip:
@@ -304,11 +329,11 @@ def spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs):
         p = nearest(origin, ocean_ports) if ocean_ports else None
         return p if near_enough(origin, p) else None
 
-    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train):
+    if vehicle_type in (VehicleType.SemiTruck, VehicleType.Train, VehicleType.Drone):
         h = nearest(origin, shipping_hubs) if shipping_hubs else None
         return h if near_enough(origin, h) else None
 
-    if vehicle_type in (VehicleType.Airplane, VehicleType.Drone):
+    if vehicle_type == VehicleType.Airplane:
         a = nearest(origin, airports) if airports else None
         return a if near_enough(origin, a) else None
 
@@ -326,6 +351,13 @@ def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, ship
 
     route_path = [dest]
     distance_km = km(origin, dest)
+    route_kind = "direct"
+
+    terrain_penalty = estimate_terrain_penalty(
+        vehicle_type, origin, dest, ocean_ports, shipping_hubs
+    )
+    if terrain_penalty == float("inf"):
+        return None
 
     if vehicle_type == VehicleType.CargoShip:
         ship_info = build_ship_path(origin, dest, ocean_ports)
@@ -333,30 +365,55 @@ def route_score(vehicle_type, origin, dest, n_boxes, ocean_ports, airports, ship
             return None
         route_path = ship_info["path"][1:]
         distance_km = ship_info["path_km"]
+        route_kind = "port_to_port"
+        terrain_penalty = 0.0
 
-    terrain_penalty = estimate_terrain_penalty(vehicle_type, origin, dest, ocean_ports, shipping_hubs)
-    if terrain_penalty == float("inf"):
-        return None
+    elif vehicle_type == VehicleType.Airplane:
+        oa = nearest(origin, airports)
+        da = nearest(dest, airports)
+        if oa is None or da is None:
+            return None
+
+        route_path = [da]
+        distance_km = km(oa, da)
+        route_kind = "airport_to_airport"
+        terrain_penalty = 0.0
+
+    elif vehicle_type == VehicleType.Drone:
+        route_path = [dest]
+        distance_km = km(origin, dest)
+        route_kind = "local_land"
+        terrain_penalty = 0.0
 
     cost = cfg.base_cost + cfg.per_km_cost * distance_km + terrain_penalty
-    value = load * _BOX_VALUE
-    margin = value - cost
-    cost_per_box_km = cfg.per_km_cost / load
+
+    if vehicle_type == VehicleType.Drone:
+        cost *= 2.5
+
+    if vehicle_type == VehicleType.Train:
+        if distance_km < _TRAIN_MIN_KM and load < _TRAIN_MIN_LOAD:
+            return None
+        if distance_km < 600:
+            cost *= 1.35
+
+    if vehicle_type == VehicleType.SemiTruck and distance_km < 600:
+        cost *= 0.95
+
+    effective_distance = max(distance_km, 1.0)
+    cost_per_box_km = cost / (load * effective_distance)
+    margin = load * _BOX_VALUE - cost
 
     return {
         "vehicle_type": vehicle_type,
         "distance_km": distance_km,
         "load": load,
         "cost": cost,
-        "value": value,
         "margin": margin,
         "terrain_penalty": terrain_penalty,
         "cost_per_box_km": cost_per_box_km,
         "route_path": route_path,
-        "route_kind": "port_to_port" if vehicle_type == VehicleType.CargoShip else "direct",
+        "route_kind": route_kind,
     }
-
-
 
 
 def choose_best_vehicle(origin, dest, n_boxes, ocean_ports, airports, shipping_hubs, force=False):
@@ -364,7 +421,7 @@ def choose_best_vehicle(origin, dest, n_boxes, ocean_ports, airports, shipping_h
     direct_distance = km(origin, dest)
 
     if direct_distance >= _LONG_ROUTE_KM:
-        vehicle_pool = [VehicleType.Airplane, VehicleType.Drone]
+        vehicle_pool = [VehicleType.Airplane]
     else:
         vehicle_pool = [
             VehicleType.CargoShip,
@@ -387,12 +444,13 @@ def choose_best_vehicle(origin, dest, n_boxes, ocean_ports, airports, shipping_h
 
     candidates.sort(
         key=lambda x: (
-            x["cost"],
             x["cost_per_box_km"],
+            x["cost"],
             -x["load"],
         )
     )
     return candidates[0]
+
 
 def find_idle_vehicle(vehicle_type, vehicles, origin, ocean_ports, airports, shipping_hubs):
     spawn = spawn_point_for(vehicle_type, origin, ocean_ports, airports, shipping_hubs)
